@@ -1,5 +1,4 @@
 #!/usr/bin/python
-# -*- coding: latin-1 -*-
 """
 FDGH Converter 1.0
 A script that converts Kirby's Return to Dreamland FDGH files to and
