@@ -1,13 +1,15 @@
-# FDGH Converter 1.0
+# FDGH Converter 2.0
 
-A script that converts Kirby's Return to Dreamland FDGH files to and from XML.
-Copyright (C) 2016 RoadrunnerWMC
+A script that converts FDGH files (found in several Kirby games) to and from XML.
+Copyright (C) 2016-2017 RoadrunnerWMC
 
 ## FDGH Files
 
-FDGH is a file format used in Kirby's Return to Dreamland which defines which files (models, animations, etc) the game should load in advance of each level. If the game encounters enemies not predicted by the FDGH file, it will still load the enemy's files as needed, but an annoying lag will occur momentarily during gameplay. Thus, the FDGH file needs to be editable for interesting custom levels to be possible.
+FDGH is a file format used in various Kirby games that defines which files (models, animations, etc) the game should load in advance of each level. If a level calls for enemies not foretold by the FDGH file, the game will either lag (Return to Dreamland) or crash (Triple Deluxe, Robobot). Thus, the FDGH file needs to be editable for interesting custom levels to be possible.
 
-The game's single FDGH file, located at `<disk_root>/fdg/Archive.dat`, is embedded in a very thin wrapper called an XBIN. While most XBIN files have a .bin extension, this particular one has a .dat extension for reasons unknown.
+Kirby's Return to Dreamland's single FDGH file, located at <disk_root>/fdg/Archive.dat, is embedded in a very thin wrapper called an XBIN. While most XBIN files have a .bin extension, this particular one has a .dat extension for reasons unknown.
+
+Kirby's Return to Dreamland uses big-endian XBIN and FDGH files, and Kirby Triple Deluxe and Kirby Planet Robobot use little-endian XBIN and FDGH files. Endianness is detected automatically when converting FDGH to XML, and can be specified using the "endian" attribute in the root XML node when converting back. (Valid values: "big", "little". For backward-compatibility, the default is "big" if unspecified.)
 
 ## Usage
 

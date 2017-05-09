@@ -1,9 +1,9 @@
 #!/usr/bin/python
 """
-FDGH Converter 1.0
-A script that converts Kirby's Return to Dreamland FDGH files to and
+FDGH Converter 2.0
+A script that converts FDGH files (found in several Kirby games) to and
 from XML.
-Copyright (C) 2016 RoadrunnerWMC
+Copyright (C) 2016-2017 RoadrunnerWMC
 
 FDGH Converter is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,18 +20,24 @@ along with FDGH Converter.  If not, see <http://www.gnu.org/licenses/>.
 
 ~~~~
 
-FDGH is a file format used in Kirby's Return to Dreamland
-which defines which files (models, animations, etc) the game
-should load in advance of each level. If the game encounters
-enemies not predicted by the FDGH file, it will still load the
-enemy's files as needed, but an annoying lag will occur
-momentarily during gameplay. Thus, the FDGH file needs to be
-editable for interesting custom levels to be possible.
+FDGH is a file format used in various Kirby games that defines which
+files (models, animations, etc) the game should load in advance of each
+level. If a level calls for enemies not foretold by the FDGH file, the
+game will either lag (Return to Dreamland) or crash (Triple Deluxe,
+Robobot). Thus, the FDGH file needs to be editable for interesting
+custom levels to be possible.
 
-The game's single FDGH file, located at <disk_root>/fdg/Archive.dat,
-is embedded in a very thin wrapper called an XBIN. While most XBIN
-files have a .bin extension, this particular one has a .dat extension
-for reasons unknown.
+Kirby's Return to Dreamland's single FDGH file, located at
+<disk_root>/fdg/Archive.dat, is embedded in a very thin wrapper called
+an XBIN. While most XBIN files have a .bin extension, this particular
+one has a .dat extension for reasons unknown.
+
+Kirby's Return to Dreamland uses big-endian XBIN and FDGH files, and
+Kirby Triple Deluxe and Kirby Planet Robobot use little-endian XBIN and
+FDGH files. Endianness is detected automatically when converting FDGH to
+XML, and can be specified using the "endian" attribute in the root XML
+node when converting back. (Valid values: "big", "little". For backward-
+-compatibility, the default is "big" if unspecified.)
 
 Usage:
 python3 fdgh_converter.py file.dat    Converts file.dat to file.xml
@@ -46,33 +52,34 @@ from xml.etree import ElementTree as etree
 
 
 DEFAULT_WORLDMAP_UNKNOWN_VALUE = 2
-XBIN_MAGIC = b'XBIN\x124\x02\0'
-FDGH_MAGIC = b'FDGH'
+XBIN_MAGIC_BE = b'XBIN\x124\2\0'
+XBIN_MAGIC_LE = b'XBIN4\x12\2\0'
+FDGH_MAGIC_BE = b'FDGH'
+FDGH_MAGIC_LE = b'HGDF'
 
 
 # These make the code look cleaner!
-unpackU32 = lambda *args: struct.unpack('>I', *args)
-unpackU32_from = lambda *args: struct.unpack_from('>I', *args)
-packU32 = lambda *args: struct.pack('>I', *args)
+unpackU32 = lambda end, *args: struct.unpack(end + 'I', *args)[0]
+unpackU32_from = lambda end, *args: struct.unpack_from(end + 'I', *args)[0]
+packU32 = lambda end, *args: struct.pack(end + 'I', *args)
 
 
-def load4bLengthPrefixedString(data):
+def load4bLengthPrefixedString(end, data):
     """
     Load a 4-byte length prefixed string.
     """
-    (strLen,) = unpackU32(data[:4])
+    strLen = unpackU32(end, data[:4])
     return data[4:4+strLen].decode('latin-1')
 
 
-def pack4bLengthPrefixedPaddedString(string):
+def pack4bLengthPrefixedPaddedString(end, string):
     """
     Pack a 4-byte length prefixed string.
-    These files add 4 bytes of null padding to the end
-    of each of these strings, and *then* pad to
-    multiples of 4 (so, 4-7 bytes of padding total).
-    This function replicates that behavior.
+    These files add 4 bytes of null padding to the end of each of these
+    strings, and *then* pad to multiples of 4 (so, 4-7 bytes of padding
+    total). This function replicates that behavior.
     """
-    encoded = packU32(len(string))
+    encoded = packU32(end, len(string))
     encoded += string.encode('latin-1')
     encoded += b'\0\0\0\0'
     while len(encoded) % 4:
@@ -80,25 +87,24 @@ def pack4bLengthPrefixedPaddedString(string):
     return encoded
 
 
-def loadStringList(data, offsetToData):
+def loadStringList(end, data, offsetToData):
     """
-    Load a string list. This consists of a 4-byte string count
-    (call it "n"), followed by n offsets, followed by the data
-    region the offsets point to. Each offset points to a 4-byte
-    length-prefixed string.
+    Load a string list. This consists of a 4-byte string count (call it
+    "n"), followed by n offsets, followed by the data region the offsets
+    point to. Each offset points to a 4-byte length-prefixed string.
 
-    The offsetToData parameter is the absolute offset of the
-    data being passed. This is needed in order to convert the
-    absolute offsets of the string-offsets section into relative
-    offsets, which can be loaded correctly.
+    The offsetToData parameter is the absolute offset of the data being
+    passed. This is needed in order to convert the absolute offsets of
+    the string-offsets section into relative offsets, which can be
+    loaded correctly.
     """
-    (numberOfStrings,) = unpackU32(data[:4])
+    numberOfStrings = unpackU32(end, data[:4])
 
     strs = []
     for i in range(numberOfStrings):
-        (strOff,) = unpackU32_from(data, 4 + 4 * i)
+        strOff = unpackU32_from(end, data, 4 + 4 * i)
         strOff -= offsetToData
-        strs.append(load4bLengthPrefixedString(data[strOff:]))
+        strs.append(load4bLengthPrefixedString(end, data[strOff:]))
 
     return strs
 
@@ -106,26 +112,31 @@ def loadStringList(data, offsetToData):
 def loadXbin(data):
     """
     Load the data from this XBIN file.
-    Returns the data and the metadata value (as an int).
+    Returns the endianness ('>' or '<'), the data, and the metadata
+    value (as an int).
     """
     if len(data) < 16:
         raise ValueError('File is too short for XBIN')
 
-    magic, filesize, metadata = struct.unpack('>8s2I', data[:16])
-    if magic != XBIN_MAGIC:
+    end = {XBIN_MAGIC_BE: '>', XBIN_MAGIC_LE: '<'}.get(data[:8])
+    if end is None:
         raise ValueError('Incorrect XBIN magic')
+
+    filesize, metadata = struct.unpack_from(end + '2I', data, 8)
 
     # Metadata is always either 0x3A4 or 0xFDE9
     # Please find out what those mean.
 
-    return data[16:filesize], metadata
+    return end, data[16:filesize], metadata
 
 
-def saveXbin(data, metadata):
+def saveXbin(end, data, metadata):
     """
-    Create a XBIN file with the provided data and metadata value.
+    Create a XBIN file with the provided endianness ('>' or '<'), data,
+    and metadata value.
     """
-    return XBIN_MAGIC + struct.pack('>2I', len(data) + 16, metadata) + data
+    magic = {'>': XBIN_MAGIC_BE, '<': XBIN_MAGIC_LE}[end]
+    return magic + struct.pack(end + '2I', len(data) + 16, metadata) + data
 
 
 def fdghToXml(data):
@@ -137,55 +148,68 @@ def fdghToXml(data):
         raise ValueError('File is too short to be FDGH')
 
     # Main header: 20 bytes
-    magic, worldMapUnknown, worldMapStart, roomOffsetListStart, assetOffsetListStart = struct.unpack('>4s4I', data[:20])
-    if magic != FDGH_MAGIC:
+    end = {FDGH_MAGIC_BE: '>', FDGH_MAGIC_LE: '<'}.get(data[:4])
+    if end is None:
         raise ValueError('Incorrect FDGH magic')
+    (worldMapUnknown, worldMapStart, roomOffsetListStart,
+        assetOffsetListStart) = struct.unpack_from(end + '4I', data, 4)
 
     # World map data: 4b count, then the values themselves
-    (worldMapCount,) = unpackU32_from(data, worldMapStart - 16)
-    worldMapIndices = list(struct.unpack_from('>%dI' % worldMapCount, data, worldMapStart - 12))
+    worldMapCount = unpackU32_from(end, data, worldMapStart - 16)
+    worldMapIndices = list(struct.unpack_from(
+        end + '%dI' % worldMapCount, data, worldMapStart - 12))
 
-    # Room list: 4b count, then three offsets per room, then the data region the offsets point to
-    roomList = [] # [('roomName', [assetIndex, assetIndex], [linkIndex, linkIndex])]
-    (roomCount,) = unpackU32_from(data, roomOffsetListStart - 16)
+    # Room list: 4b count, then three offsets per room, then the data
+    # region the offsets point to
+    roomList = [] # [('roomName',
+                  #   [assetIndex, assetIndex],
+                  #   [linkIndex, linkIndex]   )]
+    roomCount = unpackU32_from(end, data, roomOffsetListStart - 16)
     for i in range(roomCount):
 
         # Read the three offsets for this room
-        startOfString, startOfLinks, startOfAssets = struct.unpack_from('>III', data, roomOffsetListStart - 12 + 12 * i)
+        startOfString, startOfLinks, startOfAssets = struct.unpack_from(
+            end + 'III', data, roomOffsetListStart - 12 + 12 * i)
 
         # First offset: room name
-        roomName = load4bLengthPrefixedString(data[startOfString - 16:])
+        roomName = load4bLengthPrefixedString(end, data[startOfString - 16:])
 
         # Second offset: links to rooms with required assets (indices)
-        (linksCount,) = unpackU32_from(data, startOfLinks - 16)
+        linksCount = unpackU32_from(end, data, startOfLinks - 16)
         links = []
         for i in range(linksCount):
-            (idx,) = unpackU32_from(data, startOfLinks - 12 + 4 * i)
+            idx = unpackU32_from(end, data, startOfLinks - 12 + 4 * i)
             links.append(idx)
 
         # Third offset: links to required assets (indices)
-        (assetsCount,) = unpackU32_from(data, startOfAssets - 16)
+        assetsCount = unpackU32_from(end, data, startOfAssets - 16)
         assets = []
         for i in range(assetsCount):
-            (idx,) = unpackU32_from(data, startOfAssets - 12 + 4 * i)
+            idx = unpackU32_from(end, data, startOfAssets - 12 + 4 * i)
             assets.append(idx)
 
         # Put them in the room list
         roomList.append((roomName, links, assets))
 
     # Assets list
-    assetsList = loadStringList(data[assetOffsetListStart-16:], assetOffsetListStart)
+    assetsList = loadStringList(
+        end, data[assetOffsetListStart-16:], assetOffsetListStart)
 
     ################################################################
     ######################### Generate XML #########################
 
     root = etree.Element('fdgh')
+    root.attrib['endian'] = {'>': 'big', '<': 'little'}[end]
 
     # Comment
-    root.append(etree.Comment('This XML file was generated on ' + str(datetime.datetime.now()) + ' by:' + __doc__))
+    root.append(etree.Comment('This XML file was generated on '
+                              + str(datetime.datetime.now())
+                              + ' by:'
+                              + __doc__))
 
     # World map
-    worldMapNode = etree.SubElement(root, 'worldmap', attrib={'value': str(worldMapUnknown)})
+    worldMapNode = etree.SubElement(root, 'worldmap',
+        attrib={'value': str(worldMapUnknown)})
     for idx in worldMapIndices:
         roomNode = etree.SubElement(worldMapNode, 'room')
         roomNode.text = roomList[idx][0]
@@ -193,16 +217,20 @@ def fdghToXml(data):
     # Rooms
     roomsNode = etree.SubElement(root, 'rooms')
     for roomName, linkIndices, assetIndices in roomList:
-        roomNode = etree.SubElement(roomsNode, 'room', attrib={'name': roomName})
+        roomNode = etree.SubElement(roomsNode, 'room',
+            attrib={'name': roomName})
         for linkIndex in linkIndices:
             linkNode = etree.SubElement(roomNode, 'link')
-            linkNode.text = roomList[linkIndex][0] # The name of the room this link points to
+            linkNode.text = roomList[linkIndex][0] # The name of the
+                                                   # room this link
+                                                   # points to
         for assetIndex in assetIndices:
             assetNode = etree.SubElement(roomNode, 'asset')
             assetNode.text = text=assetsList[assetIndex]
 
     # Return well-formed UTF-8 XML
-    return '<?xml version="1.0" encoding="utf-8"?>' + etree.tostring(root, encoding='unicode')
+    return ('<?xml version="1.0" encoding="utf-8"?>'
+            + etree.tostring(root, encoding='unicode'))
 
 
 def xmlToFdgh(data):
@@ -214,11 +242,14 @@ def xmlToFdgh(data):
     roomList = []
 
     fdghRoot = etree.fromstring(data)
+    end = {'big': '>', 'little': '<'}.get(
+        fdghRoot.attrib.get('endian', 'big'), '>')
     for container in fdghRoot:
         if container.tag == 'worldmap':
             # Parse world map data
 
-            worldMapUnknown = int(container.get('value', DEFAULT_WORLDMAP_UNKNOWN_VALUE))
+            worldMapUnknown = int(container.get(
+                'value', DEFAULT_WORLDMAP_UNKNOWN_VALUE))
 
             for room in container:
                 if room.tag == 'room':
@@ -248,20 +279,23 @@ def xmlToFdgh(data):
     # offsets everywhere. We'll do the best we can.
 
     # Step 1: start putting together a FDGH header
-    # That hardcoded value is the offset to the world map data, which is always
-    # at 0x24
-    fdghHead = FDGH_MAGIC + packU32(worldMapUnknown) + b'\0\0\0$'
+    # That hardcoded value is the offset to the world map data, which is
+    # always at 0x24
+    magic = FDGH_MAGIC_BE if end == '>' else FDGH_MAGIC_LE
+    wmDataOffset = b'\0\0\0$' if end == '>' else b'$\0\0\0'
+    fdghHead = magic + packU32(end, worldMapUnknown) + wmDataOffset
 
     # Step 2: put together the world map data
-    worldMapData = packU32(len(worldMapRoomNames))
+    worldMapData = packU32(end, len(worldMapRoomNames))
     for name in worldMapRoomNames:
         # Find the index of this name
         for index, (roomName, _, _) in enumerate(roomList):
             if roomName == name:
-                worldMapData += packU32(index)
+                worldMapData += packU32(end, index)
                 break
         else:
-            raise ValueError('Cannot find the room "%s", which is referenced in the world map section.' % name)
+            raise ValueError('Cannot find the room "%s", which is'
+                ' referenced in the world map section.' % name)
 
     # Step 3: generate the assets list (the set-union of all assets
     # needed by all rooms)
@@ -271,23 +305,25 @@ def xmlToFdgh(data):
             if asset not in assetsList:
                 assetsList.append(asset)
 
-    # Step 4: add the offset to the room-offset list and room data to the header
+    # Step 4: add the offset to the room-offset list and room data to
+    # the header
     offsetToRoomHeaderData = 0x24 + len(worldMapData)
-    fdghHead += packU32(offsetToRoomHeaderData)
+    fdghHead += packU32(end, offsetToRoomHeaderData)
     offsetToRoomData = offsetToRoomHeaderData + 4 + len(roomList) * 12
 
-    # Step 5: generate the data for each room and the offsets-list for it
-    roomOffsetData = packU32(len(roomList))
+    # Step 5: generate the data for each room and the offsets-list for
+    # it
+    roomOffsetData = packU32(end, len(roomList))
     roomData = b''
     for roomName, linkNames, assetNames in roomList:
 
         # Room name
-        roomOffsetData += packU32(offsetToRoomData + len(roomData))
-        roomData += pack4bLengthPrefixedPaddedString(roomName)
+        roomOffsetData += packU32(end, offsetToRoomData + len(roomData))
+        roomData += pack4bLengthPrefixedPaddedString(end, roomName)
 
         # Link names
-        roomOffsetData += packU32(offsetToRoomData + len(roomData))
-        roomData += packU32(len(linkNames))
+        roomOffsetData += packU32(end, offsetToRoomData + len(roomData))
+        roomData += packU32(end, len(linkNames))
         for name in linkNames:
             # Find the index of the level with this name
             for otherIdx, (otherName, _, _) in enumerate(roomList):
@@ -297,39 +333,41 @@ def xmlToFdgh(data):
                 raise ValueError('Cannot find the room matching "%s".' % name)
 
             # Append this index as a U32
-            roomData += packU32(otherIdx)
+            roomData += packU32(end, otherIdx)
 
         # Asset names
-        roomOffsetData += packU32(offsetToRoomData + len(roomData))
-        roomData += packU32(len(assetNames))
+        roomOffsetData += packU32(end, offsetToRoomData + len(roomData))
+        roomData += packU32(end, len(assetNames))
         for name in assetNames:
-            roomData += packU32(assetsList.index(name))
+            roomData += packU32(end, assetsList.index(name))
 
     # Step 6: add the offset to the assets list to the header
     offsetToAssetsHeaderList = offsetToRoomData + len(roomData)
-    fdghHead += packU32(offsetToAssetsHeaderList)
+    fdghHead += packU32(end, offsetToAssetsHeaderList)
     offsetToAssetsList = offsetToAssetsHeaderList + 4 + len(assetsList) * 4
 
     # Step 7: generate the assets list itself
-    assetsOffsetData = packU32(len(assetsList))
+    assetsOffsetData = packU32(end, len(assetsList))
     assetsData = b''
     for asset in assetsList:
-        assetsOffsetData += packU32(offsetToAssetsList + len(assetsData))
-        assetsData += pack4bLengthPrefixedPaddedString(asset)
+        assetsOffsetData += packU32(end, offsetToAssetsList + len(assetsData))
+        assetsData += pack4bLengthPrefixedPaddedString(end, asset)
 
     # Step 8: put it all together
-    return fdghHead + worldMapData + roomOffsetData + roomData + assetsOffsetData + assetsData
+    return (end, fdghHead + worldMapData + roomOffsetData + roomData
+                 + assetsOffsetData + assetsData)
 
 
 def main(argv):
     """
-    Main method run automatically when this module is
-    invoked as a script
+    Main method run automatically when this module is invoked as a
+    script
     """
     print(__doc__)
 
     if len(argv) != 2:
-        print('ERROR: incorrect number of command-line arguments (expected 2, got %d)' % len(argv))
+        print('ERROR: incorrect number of command-line arguments'
+            ' (expected 2, got %d)' % len(argv))
         return
 
     inputFile = argv[1]
@@ -341,7 +379,7 @@ def main(argv):
         with open(inputFile, 'rb') as f:
             xbinData = f.read()
 
-        fdghData, metadata = loadXbin(xbinData)
+        end, fdghData, metadata = loadXbin(xbinData)
         xmlData = fdghToXml(fdghData)
 
         with open(inputFile[:-4] + '.xml', 'w', encoding='utf-8') as f:
@@ -354,14 +392,15 @@ def main(argv):
         with open(inputFile, 'r', encoding='utf-8') as f:
             xmlData = f.read()
 
-        fdghData = xmlToFdgh(xmlData)
-        xbinData = saveXbin(fdghData, 0xFDE9)
+        end, fdghData = xmlToFdgh(xmlData)
+        xbinData = saveXbin(end, fdghData, 0xFDE9)
 
         with open(inputFile[:-4] + '.dat', 'wb') as f:
             f.write(xbinData)
 
     else:
-        print('ERROR: the input filename does not end with ".dat" or ".xml" (it ends with "%s")' % inputFile[-4:])
+        print('ERROR: the input filename does not end with ".dat" or'
+            ' ".xml" (it ends with "%s")' % inputFile[-4:])
         return
 
     print('Done.')
