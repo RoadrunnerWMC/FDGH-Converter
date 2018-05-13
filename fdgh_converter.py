@@ -1,9 +1,9 @@
 #!/usr/bin/python
 """
-FDGH Converter 2.0
+FDGH Converter 3.0
 A script that converts FDGH files (found in several Kirby games) to and
 from XML.
-Copyright (C) 2016-2017 RoadrunnerWMC
+Copyright (C) 2016-2018 RoadrunnerWMC
 
 FDGH Converter is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -33,11 +33,16 @@ an XBIN. While most XBIN files have a .bin extension, this particular
 one has a .dat extension for reasons unknown.
 
 Kirby's Return to Dreamland uses big-endian XBIN and FDGH files, and
-Kirby Triple Deluxe and Kirby Planet Robobot use little-endian XBIN and
+Kirby Triple Deluxe through Kirby Star Allies use little-endian XBIN and
 FDGH files. Endianness is detected automatically when converting FDGH to
-XML, and can be specified using the "endian" attribute in the root XML
+XML, and can be specified using the "endian" attribute of the root XML
 node when converting back. (Valid values: "big", "little". For backward-
--compatibility, the default is "big" if unspecified.)
+compatibility, the default is "big" if unspecified.)
+
+Kirby Battle Royale and Kirby Star Allies use version "4" XBIN files;
+earlier games use version "2". This can be specified using the
+"xbin_version" attribute of the root XML node. (Only versions 2 and 4
+are supported. The default is "2" for backward-compatibility.)
 
 Usage:
 python3 fdgh_converter.py file.dat    Converts file.dat to file.xml
@@ -52,16 +57,19 @@ from xml.etree import ElementTree as etree
 
 
 DEFAULT_WORLDMAP_UNKNOWN_VALUE = 2
-XBIN_MAGIC_BE = b'XBIN\x124\2\0'
-XBIN_MAGIC_LE = b'XBIN4\x12\2\0'
+XBIN_MAGIC_BE = b'XBIN' + b'\x12\x34'
+XBIN_MAGIC_LE = b'XBIN' + b'\x34\x12'
 FDGH_MAGIC_BE = b'FDGH'
 FDGH_MAGIC_LE = b'HGDF'
 
 
-# These make the code look cleaner!
-unpackU32 = lambda end, *args: struct.unpack(end + 'I', *args)[0]
-unpackU32_from = lambda end, *args: struct.unpack_from(end + 'I', *args)[0]
-packU32 = lambda end, *args: struct.pack(end + 'I', *args)
+# These make the code cleaner!
+def unpackU32(end, *args):
+    return struct.unpack(end + 'I', *args)[0]
+def unpackU32_from(end, *args):
+    return struct.unpack_from(end + 'I', *args)[0]
+def packU32(end, *args):
+    return struct.pack(end + 'I', *args)
 
 
 def load4bLengthPrefixedString(end, data):
@@ -112,40 +120,94 @@ def loadStringList(end, data, offsetToData):
 def loadXbin(data):
     """
     Load the data from this XBIN file.
-    Returns the endianness ('>' or '<'), the data, and the metadata
-    value (as an int).
+    Returns the endianness ('>' or '<'), the data, the metadata value
+    (as an int), and the XBIN version.
     """
     if len(data) < 16:
         raise ValueError('File is too short for XBIN')
 
-    end = {XBIN_MAGIC_BE: '>', XBIN_MAGIC_LE: '<'}.get(data[:8])
+    end = {XBIN_MAGIC_BE: '>', XBIN_MAGIC_LE: '<'}.get(data[:6])
     if end is None:
         raise ValueError('Incorrect XBIN magic')
 
-    filesize, metadata = struct.unpack_from(end + '2I', data, 8)
+    version = data[6]
+    if data[7] != 0:
+        raise ValueError(f'XBIN[7] is {data[7]} (!= 0)')
 
     # Metadata is always either 0x3A4 or 0xFDE9
     # Please find out what those mean.
 
-    return end, data[16:filesize], metadata
+    if version == 2:
+        dataStart = 0x10
+
+        filesize, metadata = struct.unpack_from(end + '2I', data, 8)
+
+    elif version == 4:
+        dataStart = 0x14
+
+        filesize, metadata, colrOffset = struct.unpack_from(end + '3I', data, 8)
+
+        if filesize != colrOffset:
+            raise ValueError(f'XBIN: filesize ({hex(filesizeA)})'
+                             f' != COLR offset ({hex(filesizeB)})')
+
+        if end == '>':
+            expectedCOLR = b'COLR' + b'\0' * 8
+        else:
+            expectedCOLR = b'RLOC' + b'\0' * 8
+
+        assert data[colrOffset:] == expectedCOLR
+
+    else:
+        raise ValueError(f'Unknown XBIN version: {version}')
+
+    return end, data[dataStart:filesize], metadata, version
 
 
-def saveXbin(end, data, metadata):
+def saveXbin(end, data, metadata, version):
     """
-    Create a XBIN file with the provided endianness ('>' or '<'), data,
-    and metadata value.
+    Create a XBIN file of given version with the provided endianness
+    ('>' or '<'), data, and metadata value.
     """
-    magic = {'>': XBIN_MAGIC_BE, '<': XBIN_MAGIC_LE}[end]
-    return magic + struct.pack(end + '2I', len(data) + 16, metadata) + data
+    xbin = bytearray({'>': XBIN_MAGIC_BE, '<': XBIN_MAGIC_LE}[end])
+    xbin.append(version)
+    xbin.append(0)
+
+    if version == 2:
+        filesize = len(data) + 0x10
+    elif version == 4:
+        filesize = len(data) + 0x14
+    else:
+        raise ValueError(f'Unknown XBIN version: {version}')
+
+    xbin.extend(struct.pack(end + '2I', filesize, metadata))
+
+    if version == 4:
+        xbin.extend(struct.pack(end + 'I', filesize))
+
+    xbin.extend(data)
+    xbin.extend(b'COLR' if end == '>' else b'RLOC')
+    xbin.extend(b'\0' * 8)
+
+    return bytes(xbin)
 
 
-def fdghToXml(data):
+def fdghToXml(data, xbinVersion):
     """
     Convert binary FDGH data to a string containing an XML file.
     """
 
     if len(data) < 16:
         raise ValueError('File is too short to be FDGH')
+
+    # Calculate the adjustment needed for all offset values due to the
+    # XBIN header size
+    xbinAdj = {
+        2: -0x10,
+        4: -0x14,
+        }.get(xbinVersion)
+    if xbinAdj is None:
+        raise ValueError(f'Unknown XBIN version: {xbinVersion}')
 
     # Main header: 20 bytes
     end = {FDGH_MAGIC_BE: '>', FDGH_MAGIC_LE: '<'}.get(data[:4])
@@ -155,37 +217,37 @@ def fdghToXml(data):
         assetOffsetListStart) = struct.unpack_from(end + '4I', data, 4)
 
     # World map data: 4b count, then the values themselves
-    worldMapCount = unpackU32_from(end, data, worldMapStart - 16)
+    worldMapCount = unpackU32_from(end, data, worldMapStart + xbinAdj)
     worldMapIndices = list(struct.unpack_from(
-        end + '%dI' % worldMapCount, data, worldMapStart - 12))
+        f'{end}{worldMapCount}I', data, worldMapStart + 4 + xbinAdj))
 
     # Room list: 4b count, then three offsets per room, then the data
     # region the offsets point to
     roomList = [] # [('roomName',
                   #   [assetIndex, assetIndex],
                   #   [linkIndex, linkIndex]   )]
-    roomCount = unpackU32_from(end, data, roomOffsetListStart - 16)
+    roomCount = unpackU32_from(end, data, roomOffsetListStart + xbinAdj)
     for i in range(roomCount):
 
         # Read the three offsets for this room
         startOfString, startOfLinks, startOfAssets = struct.unpack_from(
-            end + 'III', data, roomOffsetListStart - 12 + 12 * i)
+            end + 'III', data, roomOffsetListStart + 4 + 12 * i + xbinAdj)
 
         # First offset: room name
-        roomName = load4bLengthPrefixedString(end, data[startOfString - 16:])
+        roomName = load4bLengthPrefixedString(end, data[startOfString + xbinAdj:])
 
         # Second offset: links to rooms with required assets (indices)
-        linksCount = unpackU32_from(end, data, startOfLinks - 16)
+        linksCount = unpackU32_from(end, data, startOfLinks + xbinAdj)
         links = []
         for i in range(linksCount):
-            idx = unpackU32_from(end, data, startOfLinks - 12 + 4 * i)
+            idx = unpackU32_from(end, data, startOfLinks + 4 + 4 * i + xbinAdj)
             links.append(idx)
 
         # Third offset: links to required assets (indices)
-        assetsCount = unpackU32_from(end, data, startOfAssets - 16)
+        assetsCount = unpackU32_from(end, data, startOfAssets + xbinAdj)
         assets = []
         for i in range(assetsCount):
-            idx = unpackU32_from(end, data, startOfAssets - 12 + 4 * i)
+            idx = unpackU32_from(end, data, startOfAssets + 4 + 4 * i + xbinAdj)
             assets.append(idx)
 
         # Put them in the room list
@@ -193,13 +255,14 @@ def fdghToXml(data):
 
     # Assets list
     assetsList = loadStringList(
-        end, data[assetOffsetListStart-16:], assetOffsetListStart)
+        end, data[assetOffsetListStart + xbinAdj:], assetOffsetListStart)
 
     ################################################################
     ######################### Generate XML #########################
 
     root = etree.Element('fdgh')
     root.attrib['endian'] = {'>': 'big', '<': 'little'}[end]
+    root.attrib['xbin_version'] = str(xbinVersion)
 
     # Comment
     root.append(etree.Comment('This XML file was generated on '
@@ -244,6 +307,8 @@ def xmlToFdgh(data):
     fdghRoot = etree.fromstring(data)
     end = {'big': '>', 'little': '<'}.get(
         fdghRoot.attrib.get('endian', 'big'), '>')
+    xbinVersion = int(fdghRoot.attrib.get('xbin_version', '2'))
+
     for container in fdghRoot:
         if container.tag == 'worldmap':
             # Parse world map data
@@ -278,11 +343,20 @@ def xmlToFdgh(data):
     # This is difficult to do cleanly because this file uses absolute
     # offsets everywhere. We'll do the best we can.
 
+    # Step 0: calculate the adjustment needed for all offset values due
+    # to the XBIN header size
+    xbinAdj = {
+        2: 0x10,
+        4: 0x14,
+        }.get(xbinVersion)
+    if xbinAdj is None:
+        raise ValueError(f'Unknown XBIN version: {xbinVersion}')
+
     # Step 1: start putting together a FDGH header
     # That hardcoded value is the offset to the world map data, which is
     # always at 0x24
     magic = FDGH_MAGIC_BE if end == '>' else FDGH_MAGIC_LE
-    wmDataOffset = b'\0\0\0$' if end == '>' else b'$\0\0\0'
+    wmDataOffset = packU32(end, 0x14 + xbinAdj)
     fdghHead = magic + packU32(end, worldMapUnknown) + wmDataOffset
 
     # Step 2: put together the world map data
@@ -294,8 +368,8 @@ def xmlToFdgh(data):
                 worldMapData += packU32(end, index)
                 break
         else:
-            raise ValueError('Cannot find the room "%s", which is'
-                ' referenced in the world map section.' % name)
+            raise ValueError(f'Cannot find the room "{name}", which is'
+                              ' referenced in the world map section.')
 
     # Step 3: generate the assets list (the set-union of all assets
     # needed by all rooms)
@@ -307,7 +381,7 @@ def xmlToFdgh(data):
 
     # Step 4: add the offset to the room-offset list and room data to
     # the header
-    offsetToRoomHeaderData = 0x24 + len(worldMapData)
+    offsetToRoomHeaderData = 0x14 + len(worldMapData) + xbinAdj
     fdghHead += packU32(end, offsetToRoomHeaderData)
     offsetToRoomData = offsetToRoomHeaderData + 4 + len(roomList) * 12
 
@@ -330,7 +404,7 @@ def xmlToFdgh(data):
                 if otherName == name:
                     break
             else:
-                raise ValueError('Cannot find the room matching "%s".' % name)
+                raise ValueError(f'Cannot find the room matching "{name}".')
 
             # Append this index as a U32
             roomData += packU32(end, otherIdx)
@@ -354,8 +428,10 @@ def xmlToFdgh(data):
         assetsData += pack4bLengthPrefixedPaddedString(end, asset)
 
     # Step 8: put it all together
-    return (end, fdghHead + worldMapData + roomOffsetData + roomData
-                 + assetsOffsetData + assetsData)
+    return (end,
+            fdghHead + worldMapData + roomOffsetData + roomData
+                + assetsOffsetData + assetsData,
+            xbinVersion)
 
 
 def main(argv):
@@ -367,7 +443,7 @@ def main(argv):
 
     if len(argv) != 2:
         print('ERROR: incorrect number of command-line arguments'
-            ' (expected 2, got %d)' % len(argv))
+              f' (expected 2, got {len(argv)})')
         return
 
     inputFile = argv[1]
@@ -379,8 +455,8 @@ def main(argv):
         with open(inputFile, 'rb') as f:
             xbinData = f.read()
 
-        end, fdghData, metadata = loadXbin(xbinData)
-        xmlData = fdghToXml(fdghData)
+        end, fdghData, metadata, xbinVersion = loadXbin(xbinData)
+        xmlData = fdghToXml(fdghData, xbinVersion)
 
         with open(inputFile[:-4] + '.xml', 'w', encoding='utf-8') as f:
             f.write(xmlData)
@@ -392,18 +468,19 @@ def main(argv):
         with open(inputFile, 'r', encoding='utf-8') as f:
             xmlData = f.read()
 
-        end, fdghData = xmlToFdgh(xmlData)
-        xbinData = saveXbin(end, fdghData, 0xFDE9)
+        end, fdghData, xbinVersion = xmlToFdgh(xmlData)
+        xbinData = saveXbin(end, fdghData, 0xFDE9, xbinVersion)
 
         with open(inputFile[:-4] + '.dat', 'wb') as f:
             f.write(xbinData)
 
     else:
         print('ERROR: the input filename does not end with ".dat" or'
-            ' ".xml" (it ends with "%s")' % inputFile[-4:])
+              f' ".xml" (it ends with "{inputFile[-4:]}")')
         return
 
     print('Done.')
 
 
-if __name__ == '__main__': main(sys.argv)
+if __name__ == '__main__':
+    main(sys.argv)

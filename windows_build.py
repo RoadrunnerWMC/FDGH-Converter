@@ -1,10 +1,10 @@
 #!/usr/bin/python
 # -*- coding: latin-1 -*-
 """
-FDGH Converter 1.0
+FDGH Converter 3.0
 A script that converts Kirby's Return to Dreamland FDGH files to and
 from XML.
-Copyright (C) 2016 RoadrunnerWMC
+Copyright (C) 2016-2018 RoadrunnerWMC
 
 FDGH Converter is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ You should have received a copy of the GNU General Public License
 along with FDGH Converter.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-Version = '1.0' # This must be a valid float in string format
+Version = '3.0' # This must be a valid float in string format
 
 
 ################################################################
