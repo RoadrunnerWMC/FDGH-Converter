@@ -51,6 +51,7 @@ python3 fdgh_converter.py file.xml    Converts file.xml to file.dat
 
 
 import datetime
+import string
 import struct
 import sys
 from xml.etree import ElementTree as etree
@@ -115,6 +116,21 @@ def load_string_list(end, data, offset_to_data):
         strs.append(load_4b_length_prefixed_string(end, data[str_off:]))
 
     return strs
+
+
+def fdgh_string_sorting_key(s):
+    """
+    Function that can be used to sort strings the same way HAL's tool does
+    """
+    key = []
+    for c in s.lower():
+        # Oddly, punctuation sorts before everything else in this sorting scheme
+        if c in string.punctuation:
+            key.append(ord(c) - 999999999999999)
+        else:
+            key.append(ord(c))
+
+    return key
 
 
 def load_xbin(data):
@@ -388,6 +404,7 @@ def xml_to_fdgh(data):
         for asset in asset_names:
             if asset not in assets_list:
                 assets_list.append(asset)
+    assets_list.sort(key=fdgh_string_sorting_key)
 
     # Step 4: add the offset to the room-offset list and room data to
     # the header
