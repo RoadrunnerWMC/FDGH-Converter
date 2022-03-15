@@ -54,7 +54,11 @@ import datetime
 import string
 import struct
 import sys
+from typing import Any, List, Literal
 from xml.etree import ElementTree as etree
+
+
+Endianness = Literal['<', '>']
 
 
 DEFAULT_WORLDMAP_UNKNOWN_VALUE = 2
@@ -65,15 +69,15 @@ FDGH_MAGIC_LE = b'HGDF'
 
 
 # These make the code cleaner!
-def unpack_u32(end, *args):
+def unpack_u32(end: Endianness, *args) -> Any:
     return struct.unpack(end + 'I', *args)[0]
-def unpack_u32_from(end, *args):
+def unpack_u32_from(end: Endianness, *args) -> Any:
     return struct.unpack_from(end + 'I', *args)[0]
-def pack_u32(end, *args):
+def pack_u32(end: Endianness, *args) -> Any:
     return struct.pack(end + 'I', *args)
 
 
-def load_4b_length_prefixed_string(end, data):
+def load_4b_length_prefixed_string(end: Endianness, data: bytes) -> str:
     """
     Load a 4-byte length prefixed string.
     """
@@ -81,7 +85,7 @@ def load_4b_length_prefixed_string(end, data):
     return data[4:4+strLen].decode('latin-1')
 
 
-def pack_4b_length_prefixed_padded_string(end, string):
+def pack_4b_length_prefixed_padded_string(end: Endianness, string: str) -> bytes:
     """
     Pack a 4-byte length prefixed string.
     These files add 4 bytes of null padding to the end of each of these
@@ -96,7 +100,7 @@ def pack_4b_length_prefixed_padded_string(end, string):
     return encoded
 
 
-def load_string_list(end, data, offset_to_data):
+def load_string_list(end: Endianness, data: bytes, offset_to_data: int) -> List[str]:
     """
     Load a string list. This consists of a 4-byte string count (call it
     "n"), followed by n offsets, followed by the data region the offsets
@@ -118,7 +122,7 @@ def load_string_list(end, data, offset_to_data):
     return strs
 
 
-def fdgh_string_sorting_key(s):
+def fdgh_string_sorting_key(s: str) -> Any:
     """
     Function that can be used to sort strings the same way HAL's tool does
     """
@@ -133,7 +137,7 @@ def fdgh_string_sorting_key(s):
     return key
 
 
-def load_xbin(data):
+def load_xbin(data: bytes) -> (Endianness, bytes, int, int):
     """
     Load the data from this XBIN file.
     Returns the endianness ('>' or '<'), the data, the metadata value
@@ -182,7 +186,7 @@ def load_xbin(data):
     return end, data[data_start:filesize], metadata, version
 
 
-def save_xbin(end, data, metadata, version):
+def save_xbin(end: Endianness, data: bytes, metadata: int, version: int) -> bytes:
     """
     Create a XBIN file of given version with the provided endianness
     ('>' or '<'), data, and metadata value.
@@ -216,7 +220,7 @@ def save_xbin(end, data, metadata, version):
     return bytes(xbin)
 
 
-def fdgh_to_xml(data, xbin_version):
+def fdgh_to_xml(data: bytes, xbin_version: int) -> str:
     """
     Convert binary FDGH data to a string containing an XML file.
     """
@@ -322,7 +326,7 @@ def fdgh_to_xml(data, xbin_version):
     return etree.tostring(root, encoding='unicode', xml_declaration=True)
 
 
-def xml_to_fdgh(data):
+def xml_to_fdgh(data: str) -> bytes:
     """
     Convert a string containing an XML file to binary FDGH data.
     """
@@ -461,7 +465,7 @@ def xml_to_fdgh(data):
             xbin_version)
 
 
-def main(argv):
+def main(argv: List[str]) -> None:
     """
     Main method run automatically when this module is invoked as a
     script
