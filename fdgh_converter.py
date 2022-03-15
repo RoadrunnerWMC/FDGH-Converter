@@ -147,9 +147,11 @@ def loadXbin(data):
 
         filesize, metadata, colrOffset = struct.unpack_from(end + '3I', data, 8)
 
-        if filesize != colrOffset:
-            raise ValueError(f'XBIN: filesize ({hex(filesizeA)})'
-                             f' != COLR offset ({hex(filesizeB)})')
+        filesizeAligned = (filesize + 3) & ~3
+
+        if filesizeAligned != colrOffset:
+            raise ValueError(f'XBIN: filesize ({hex(filesize)})'
+                             f' != COLR offset ({hex(colrOffset)})')
 
         if end == '>':
             expectedCOLR = b'COLR' + b'\0' * 8
@@ -174,18 +176,24 @@ def saveXbin(end, data, metadata, version):
     xbin.append(0)
 
     if version == 2:
-        filesize = len(data) + 0x10
+        headerLen = 0x10
     elif version == 4:
-        filesize = len(data) + 0x14
+        headerLen = 0x14
     else:
         raise ValueError(f'Unknown XBIN version: {version}')
 
-    xbin.extend(struct.pack(end + '2I', filesize, metadata))
+    xbin.extend(struct.pack(end + '2I', headerLen + len(data), metadata))
 
     if version == 4:
-        xbin.extend(struct.pack(end + 'I', filesize))
+        xbin.extend(b'\0\0\0\0')  # actual value filled in later
 
     xbin.extend(data)
+    while len(xbin) % 4:
+        xbin.append(0)
+
+    if version == 4:
+        struct.pack_into(end + 'I', xbin, 0x10, len(xbin))
+
     xbin.extend(b'COLR' if end == '>' else b'RLOC')
     xbin.extend(b'\0' * 8)
 
