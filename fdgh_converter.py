@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 """
 FDGH Converter 3.0
 A script that converts FDGH files (found in several Kirby games) to and
