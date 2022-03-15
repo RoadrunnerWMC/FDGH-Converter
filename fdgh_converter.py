@@ -64,30 +64,30 @@ FDGH_MAGIC_LE = b'HGDF'
 
 
 # These make the code cleaner!
-def unpackU32(end, *args):
+def unpack_u32(end, *args):
     return struct.unpack(end + 'I', *args)[0]
-def unpackU32_from(end, *args):
+def unpack_u32_from(end, *args):
     return struct.unpack_from(end + 'I', *args)[0]
-def packU32(end, *args):
+def pack_u32(end, *args):
     return struct.pack(end + 'I', *args)
 
 
-def load4bLengthPrefixedString(end, data):
+def load_4b_length_prefixed_string(end, data):
     """
     Load a 4-byte length prefixed string.
     """
-    strLen = unpackU32(end, data[:4])
+    strLen = unpack_u32(end, data[:4])
     return data[4:4+strLen].decode('latin-1')
 
 
-def pack4bLengthPrefixedPaddedString(end, string):
+def pack_4b_length_prefixed_padded_string(end, string):
     """
     Pack a 4-byte length prefixed string.
     These files add 4 bytes of null padding to the end of each of these
     strings, and *then* pad to multiples of 4 (so, 4-7 bytes of padding
     total). This function replicates that behavior.
     """
-    encoded = packU32(end, len(string))
+    encoded = pack_u32(end, len(string))
     encoded += string.encode('latin-1')
     encoded += b'\0\0\0\0'
     while len(encoded) % 4:
@@ -95,29 +95,29 @@ def pack4bLengthPrefixedPaddedString(end, string):
     return encoded
 
 
-def loadStringList(end, data, offsetToData):
+def load_string_list(end, data, offset_to_data):
     """
     Load a string list. This consists of a 4-byte string count (call it
     "n"), followed by n offsets, followed by the data region the offsets
     point to. Each offset points to a 4-byte length-prefixed string.
 
-    The offsetToData parameter is the absolute offset of the data being
-    passed. This is needed in order to convert the absolute offsets of
-    the string-offsets section into relative offsets, which can be
-    loaded correctly.
+    The offset_to_data parameter is the absolute offset of the data
+    being passed. This is needed in order to convert the absolute
+    offsets of the string-offsets section into relative offsets, which
+    can be loaded correctly.
     """
-    numberOfStrings = unpackU32(end, data[:4])
+    number_of_strings = unpack_u32(end, data[:4])
 
     strs = []
-    for i in range(numberOfStrings):
-        strOff = unpackU32_from(end, data, 4 + 4 * i)
-        strOff -= offsetToData
-        strs.append(load4bLengthPrefixedString(end, data[strOff:]))
+    for i in range(number_of_strings):
+        str_off = unpack_u32_from(end, data, 4 + 4 * i)
+        str_off -= offset_to_data
+        strs.append(load_4b_length_prefixed_string(end, data[str_off:]))
 
     return strs
 
 
-def loadXbin(data):
+def load_xbin(data):
     """
     Load the data from this XBIN file.
     Returns the endianness ('>' or '<'), the data, the metadata value
@@ -138,35 +138,35 @@ def loadXbin(data):
     # Please find out what those mean.
 
     if version == 2:
-        dataStart = 0x10
+        data_start = 0x10
 
         filesize, metadata = struct.unpack_from(end + '2I', data, 8)
 
     elif version == 4:
-        dataStart = 0x14
+        data_start = 0x14
 
-        filesize, metadata, colrOffset = struct.unpack_from(end + '3I', data, 8)
+        filesize, metadata, colr_offset = struct.unpack_from(end + '3I', data, 8)
 
-        filesizeAligned = (filesize + 3) & ~3
+        filesize_aligned = (filesize + 3) & ~3
 
-        if filesizeAligned != colrOffset:
+        if filesize_aligned != colr_offset:
             raise ValueError(f'XBIN: filesize ({hex(filesize)})'
-                             f' != COLR offset ({hex(colrOffset)})')
+                             f' != COLR offset ({hex(colr_offset)})')
 
         if end == '>':
-            expectedCOLR = b'COLR' + b'\0' * 8
+            expected_colr = b'COLR' + b'\0' * 8
         else:
-            expectedCOLR = b'RLOC' + b'\0' * 8
+            expected_colr = b'RLOC' + b'\0' * 8
 
-        assert data[colrOffset:] == expectedCOLR
+        assert data[colr_offset:] == expected_colr
 
     else:
         raise ValueError(f'Unknown XBIN version: {version}')
 
-    return end, data[dataStart:filesize], metadata, version
+    return end, data[data_start:filesize], metadata, version
 
 
-def saveXbin(end, data, metadata, version):
+def save_xbin(end, data, metadata, version):
     """
     Create a XBIN file of given version with the provided endianness
     ('>' or '<'), data, and metadata value.
@@ -176,13 +176,13 @@ def saveXbin(end, data, metadata, version):
     xbin.append(0)
 
     if version == 2:
-        headerLen = 0x10
+        header_len = 0x10
     elif version == 4:
-        headerLen = 0x14
+        header_len = 0x14
     else:
         raise ValueError(f'Unknown XBIN version: {version}')
 
-    xbin.extend(struct.pack(end + '2I', headerLen + len(data), metadata))
+    xbin.extend(struct.pack(end + '2I', header_len + len(data), metadata))
 
     if version == 4:
         xbin.extend(b'\0\0\0\0')  # actual value filled in later
@@ -200,7 +200,7 @@ def saveXbin(end, data, metadata, version):
     return bytes(xbin)
 
 
-def fdghToXml(data, xbinVersion):
+def fdgh_to_xml(data, xbin_version):
     """
     Convert binary FDGH data to a string containing an XML file.
     """
@@ -210,67 +210,67 @@ def fdghToXml(data, xbinVersion):
 
     # Calculate the adjustment needed for all offset values due to the
     # XBIN header size
-    xbinAdj = {
+    xbin_adj = {
         2: -0x10,
         4: -0x14,
-        }.get(xbinVersion)
-    if xbinAdj is None:
-        raise ValueError(f'Unknown XBIN version: {xbinVersion}')
+        }.get(xbin_version)
+    if xbin_adj is None:
+        raise ValueError(f'Unknown XBIN version: {xbin_version}')
 
     # Main header: 20 bytes
     end = {FDGH_MAGIC_BE: '>', FDGH_MAGIC_LE: '<'}.get(data[:4])
     if end is None:
         raise ValueError('Incorrect FDGH magic')
-    (worldMapUnknown, worldMapStart, roomOffsetListStart,
-        assetOffsetListStart) = struct.unpack_from(end + '4I', data, 4)
+    (world_map_unknown, world_map_start, room_offset_list_start,
+        asset_offset_list_start) = struct.unpack_from(end + '4I', data, 4)
 
     # World map data: 4b count, then the values themselves
-    worldMapCount = unpackU32_from(end, data, worldMapStart + xbinAdj)
-    worldMapIndices = list(struct.unpack_from(
-        f'{end}{worldMapCount}I', data, worldMapStart + 4 + xbinAdj))
+    world_map_count = unpack_u32_from(end, data, world_map_start + xbin_adj)
+    world_map_indices = list(struct.unpack_from(
+        f'{end}{world_map_count}I', data, world_map_start + 4 + xbin_adj))
 
     # Room list: 4b count, then three offsets per room, then the data
     # region the offsets point to
-    roomList = [] # [('roomName',
-                  #   [assetIndex, assetIndex],
-                  #   [linkIndex, linkIndex]   )]
-    roomCount = unpackU32_from(end, data, roomOffsetListStart + xbinAdj)
-    for i in range(roomCount):
+    room_list = [] # [('room_name',
+                   #   [asset_index, asset_index],
+                   #   [link_index, link_index]   )]
+    room_count = unpack_u32_from(end, data, room_offset_list_start + xbin_adj)
+    for i in range(room_count):
 
         # Read the three offsets for this room
-        startOfString, startOfLinks, startOfAssets = struct.unpack_from(
-            end + 'III', data, roomOffsetListStart + 4 + 12 * i + xbinAdj)
+        start_of_string, start_of_links, start_of_assets = struct.unpack_from(
+            end + 'III', data, room_offset_list_start + 4 + 12 * i + xbin_adj)
 
         # First offset: room name
-        roomName = load4bLengthPrefixedString(end, data[startOfString + xbinAdj:])
+        room_name = load_4b_length_prefixed_string(end, data[start_of_string + xbin_adj:])
 
         # Second offset: links to rooms with required assets (indices)
-        linksCount = unpackU32_from(end, data, startOfLinks + xbinAdj)
+        links_count = unpack_u32_from(end, data, start_of_links + xbin_adj)
         links = []
-        for i in range(linksCount):
-            idx = unpackU32_from(end, data, startOfLinks + 4 + 4 * i + xbinAdj)
+        for i in range(links_count):
+            idx = unpack_u32_from(end, data, start_of_links + 4 + 4 * i + xbin_adj)
             links.append(idx)
 
         # Third offset: links to required assets (indices)
-        assetsCount = unpackU32_from(end, data, startOfAssets + xbinAdj)
+        assets_count = unpack_u32_from(end, data, start_of_assets + xbin_adj)
         assets = []
-        for i in range(assetsCount):
-            idx = unpackU32_from(end, data, startOfAssets + 4 + 4 * i + xbinAdj)
+        for i in range(assets_count):
+            idx = unpack_u32_from(end, data, start_of_assets + 4 + 4 * i + xbin_adj)
             assets.append(idx)
 
         # Put them in the room list
-        roomList.append((roomName, links, assets))
+        room_list.append((room_name, links, assets))
 
     # Assets list
-    assetsList = loadStringList(
-        end, data[assetOffsetListStart + xbinAdj:], assetOffsetListStart)
+    assets_list = load_string_list(
+        end, data[asset_offset_list_start + xbin_adj:], asset_offset_list_start)
 
     ################################################################
     ######################### Generate XML #########################
 
     root = etree.Element('fdgh')
     root.attrib['endian'] = {'>': 'big', '<': 'little'}[end]
-    root.attrib['xbin_version'] = str(xbinVersion)
+    root.attrib['xbin_version'] = str(xbin_version)
 
     # Comment
     root.append(etree.Comment('This XML file was generated on '
@@ -279,70 +279,70 @@ def fdghToXml(data, xbinVersion):
                               + __doc__))
 
     # World map
-    worldMapNode = etree.SubElement(root, 'worldmap',
-        attrib={'value': str(worldMapUnknown)})
-    for idx in worldMapIndices:
-        roomNode = etree.SubElement(worldMapNode, 'room')
-        roomNode.text = roomList[idx][0]
+    world_map_node = etree.SubElement(root, 'worldmap',
+        attrib={'value': str(world_map_unknown)})
+    for idx in world_map_indices:
+        room_node = etree.SubElement(world_map_node, 'room')
+        room_node.text = room_list[idx][0]
 
     # Rooms
-    roomsNode = etree.SubElement(root, 'rooms')
-    for roomName, linkIndices, assetIndices in roomList:
-        roomNode = etree.SubElement(roomsNode, 'room',
-            attrib={'name': roomName})
-        for linkIndex in linkIndices:
-            linkNode = etree.SubElement(roomNode, 'link')
-            linkNode.text = roomList[linkIndex][0] # The name of the
-                                                   # room this link
-                                                   # points to
-        for assetIndex in assetIndices:
-            assetNode = etree.SubElement(roomNode, 'asset')
-            assetNode.text = text=assetsList[assetIndex]
+    rooms_node = etree.SubElement(root, 'rooms')
+    for room_name, link_indices, asset_indices in room_list:
+        room_node = etree.SubElement(rooms_node, 'room',
+            attrib={'name': room_name})
+        for link_index in link_indices:
+            link_node = etree.SubElement(room_node, 'link')
+            link_node.text = room_list[link_index][0] # The name of the
+                                                      # room this link
+                                                      # points to
+        for asset_index in asset_indices:
+            asset_node = etree.SubElement(room_node, 'asset')
+            asset_node.text = text=assets_list[asset_index]
 
     # Return well-formed UTF-8 XML
     return ('<?xml version="1.0" encoding="utf-8"?>'
             + etree.tostring(root, encoding='unicode'))
 
 
-def xmlToFdgh(data):
+def xml_to_fdgh(data):
     """
     Convert a string containing an XML file to binary FDGH data.
     """
 
-    worldMapRoomNames = []
-    roomList = []
+    world_map_room_names = []
+    room_list = []
 
-    fdghRoot = etree.fromstring(data)
+    fdgh_root = etree.fromstring(data)
     end = {'big': '>', 'little': '<'}.get(
-        fdghRoot.attrib.get('endian', 'big'), '>')
-    xbinVersion = int(fdghRoot.attrib.get('xbin_version', '2'))
+        fdgh_root.attrib.get('endian', 'big'), '>')
+    xbin_version = int(fdgh_root.attrib.get('xbin_version', '2'))
 
-    for container in fdghRoot:
+    for container in fdgh_root:
         if container.tag == 'worldmap':
             # Parse world map data
 
-            worldMapUnknown = int(container.get(
+            world_map_unknown = int(container.get(
                 'value', DEFAULT_WORLDMAP_UNKNOWN_VALUE))
 
             for room in container:
                 if room.tag == 'room':
-                    worldMapRoomNames.append(room.text.strip())
+                    world_map_room_names.append(room.text.strip())
 
         elif container.tag == 'rooms':
             # Parse room data
 
             for room in container:
-                roomName = room.attrib['name']
+                room_name = room.attrib['name']
 
-                linkNames = []
-                assetNames = []
-                for roomSubnode in room:
-                    if roomSubnode.tag == 'link':
-                        linkNames.append(roomSubnode.text.strip())
-                    elif roomSubnode.tag == 'asset':
-                        assetNames.append(roomSubnode.text.strip())
+                link_names = []
+                asset_names = []
+                for room_subnode in room:
+                    if room_subnode.tag == 'link':
+                        link_names.append(room_subnode.text.strip())
+                    elif room_subnode.tag == 'asset':
+                        asset_names.append(room_subnode.text.strip())
 
-                roomList.append((roomName, linkNames, assetNames))
+                room_list.append((room_name, link_names, asset_names))
 
 
     ################################################################
@@ -353,27 +353,27 @@ def xmlToFdgh(data):
 
     # Step 0: calculate the adjustment needed for all offset values due
     # to the XBIN header size
-    xbinAdj = {
+    xbin_adj = {
         2: 0x10,
         4: 0x14,
-        }.get(xbinVersion)
-    if xbinAdj is None:
-        raise ValueError(f'Unknown XBIN version: {xbinVersion}')
+        }.get(xbin_version)
+    if xbin_adj is None:
+        raise ValueError(f'Unknown XBIN version: {xbin_version}')
 
     # Step 1: start putting together a FDGH header
     # That hardcoded value is the offset to the world map data, which is
     # always at 0x24
     magic = FDGH_MAGIC_BE if end == '>' else FDGH_MAGIC_LE
-    wmDataOffset = packU32(end, 0x14 + xbinAdj)
-    fdghHead = magic + packU32(end, worldMapUnknown) + wmDataOffset
+    wm_data_offset = pack_u32(end, 0x14 + xbin_adj)
+    fdgh_head = magic + pack_u32(end, world_map_unknown) + wm_data_offset
 
     # Step 2: put together the world map data
-    worldMapData = packU32(end, len(worldMapRoomNames))
-    for name in worldMapRoomNames:
+    world_map_data = pack_u32(end, len(world_map_room_names))
+    for name in world_map_room_names:
         # Find the index of this name
-        for index, (roomName, _, _) in enumerate(roomList):
-            if roomName == name:
-                worldMapData += packU32(end, index)
+        for index, (room_name, _, _) in enumerate(room_list):
+            if room_name == name:
+                world_map_data += pack_u32(end, index)
                 break
         else:
             raise ValueError(f'Cannot find the room "{name}", which is'
@@ -381,65 +381,65 @@ def xmlToFdgh(data):
 
     # Step 3: generate the assets list (the set-union of all assets
     # needed by all rooms)
-    assetsList = []
-    for roomName, linkNames, assetNames in roomList:
-        for asset in assetNames:
-            if asset not in assetsList:
-                assetsList.append(asset)
+    assets_list = []
+    for room_name, link_names, asset_names in room_list:
+        for asset in asset_names:
+            if asset not in assets_list:
+                assets_list.append(asset)
 
     # Step 4: add the offset to the room-offset list and room data to
     # the header
-    offsetToRoomHeaderData = 0x14 + len(worldMapData) + xbinAdj
-    fdghHead += packU32(end, offsetToRoomHeaderData)
-    offsetToRoomData = offsetToRoomHeaderData + 4 + len(roomList) * 12
+    offset_to_room_header_data = 0x14 + len(world_map_data) + xbin_adj
+    fdgh_head += pack_u32(end, offset_to_room_header_data)
+    offset_to_room_data = offset_to_room_header_data + 4 + len(room_list) * 12
 
     # Step 5: generate the data for each room and the offsets-list for
     # it
-    roomOffsetData = packU32(end, len(roomList))
-    roomData = b''
-    for roomName, linkNames, assetNames in roomList:
+    room_offset_data = pack_u32(end, len(room_list))
+    room_data = b''
+    for room_name, link_names, asset_names in room_list:
 
         # Room name
-        roomOffsetData += packU32(end, offsetToRoomData + len(roomData))
-        roomData += pack4bLengthPrefixedPaddedString(end, roomName)
+        room_offset_data += pack_u32(end, offset_to_room_data + len(room_data))
+        room_data += pack_4b_length_prefixed_padded_string(end, room_name)
 
         # Link names
-        roomOffsetData += packU32(end, offsetToRoomData + len(roomData))
-        roomData += packU32(end, len(linkNames))
-        for name in linkNames:
+        room_offset_data += pack_u32(end, offset_to_room_data + len(room_data))
+        room_data += pack_u32(end, len(link_names))
+        for name in link_names:
             # Find the index of the level with this name
-            for otherIdx, (otherName, _, _) in enumerate(roomList):
-                if otherName == name:
+            for other_idx, (other_name, _, _) in enumerate(room_list):
+                if other_name == name:
                     break
             else:
                 raise ValueError(f'Cannot find the room matching "{name}".')
 
             # Append this index as a U32
-            roomData += packU32(end, otherIdx)
+            room_data += pack_u32(end, other_idx)
 
         # Asset names
-        roomOffsetData += packU32(end, offsetToRoomData + len(roomData))
-        roomData += packU32(end, len(assetNames))
-        for name in assetNames:
-            roomData += packU32(end, assetsList.index(name))
+        room_offset_data += pack_u32(end, offset_to_room_data + len(room_data))
+        room_data += pack_u32(end, len(asset_names))
+        for name in asset_names:
+            room_data += pack_u32(end, assets_list.index(name))
 
     # Step 6: add the offset to the assets list to the header
-    offsetToAssetsHeaderList = offsetToRoomData + len(roomData)
-    fdghHead += packU32(end, offsetToAssetsHeaderList)
-    offsetToAssetsList = offsetToAssetsHeaderList + 4 + len(assetsList) * 4
+    offset_to_assets_header_list = offset_to_room_data + len(room_data)
+    fdgh_head += pack_u32(end, offset_to_assets_header_list)
+    offset_to_assets_list = offset_to_assets_header_list + 4 + len(assets_list) * 4
 
     # Step 7: generate the assets list itself
-    assetsOffsetData = packU32(end, len(assetsList))
-    assetsData = b''
-    for asset in assetsList:
-        assetsOffsetData += packU32(end, offsetToAssetsList + len(assetsData))
-        assetsData += pack4bLengthPrefixedPaddedString(end, asset)
+    assets_offset_data = pack_u32(end, len(assets_list))
+    assets_data = b''
+    for asset in assets_list:
+        assets_offset_data += pack_u32(end, offset_to_assets_list + len(assets_data))
+        assets_data += pack_4b_length_prefixed_padded_string(end, asset)
 
     # Step 8: put it all together
     return (end,
-            fdghHead + worldMapData + roomOffsetData + roomData
-                + assetsOffsetData + assetsData,
-            xbinVersion)
+            fdgh_head + world_map_data + room_offset_data + room_data
+                + assets_offset_data + assets_data,
+            xbin_version)
 
 
 def main(argv):
@@ -454,37 +454,37 @@ def main(argv):
               f' (expected 2, got {len(argv)})')
         return
 
-    inputFile = argv[1]
+    input_file = argv[1]
 
-    if inputFile.endswith('.dat'):
+    if input_file.endswith('.dat'):
         # Convert FDGH to XML
         print('Converting FDGH to XML.')
 
-        with open(inputFile, 'rb') as f:
-            xbinData = f.read()
+        with open(input_file, 'rb') as f:
+            xbin_data = f.read()
 
-        end, fdghData, metadata, xbinVersion = loadXbin(xbinData)
-        xmlData = fdghToXml(fdghData, xbinVersion)
+        end, fdgh_data, metadata, xbin_version = load_xbin(xbin_data)
+        xml_data = fdgh_to_xml(fdgh_data, xbin_version)
 
-        with open(inputFile[:-4] + '.xml', 'w', encoding='utf-8') as f:
-            f.write(xmlData)
+        with open(input_file[:-4] + '.xml', 'w', encoding='utf-8') as f:
+            f.write(xml_data)
 
-    elif inputFile.endswith('.xml'):
+    elif input_file.endswith('.xml'):
         # Convert XML to FDGH
         print('Converting XML to FDGH.')
 
-        with open(inputFile, 'r', encoding='utf-8') as f:
-            xmlData = f.read()
+        with open(input_file, 'r', encoding='utf-8') as f:
+            xml_data = f.read()
 
-        end, fdghData, xbinVersion = xmlToFdgh(xmlData)
-        xbinData = saveXbin(end, fdghData, 0xFDE9, xbinVersion)
+        end, fdgh_data, xbin_version = xml_to_fdgh(xml_data)
+        xbin_data = save_xbin(end, fdgh_data, 0xFDE9, xbin_version)
 
-        with open(inputFile[:-4] + '.dat', 'wb') as f:
-            f.write(xbinData)
+        with open(input_file[:-4] + '.dat', 'wb') as f:
+            f.write(xbin_data)
 
     else:
         print('ERROR: the input filename does not end with ".dat" or'
-              f' ".xml" (it ends with "{inputFile[-4:]}")')
+              f' ".xml" (it ends with "{input_file[-4:]}")')
         return
 
     print('Done.')
