@@ -247,15 +247,15 @@ def fdgh_to_xml(data, xbin_version):
         # Second offset: links to rooms with required assets (indices)
         links_count = unpack_u32_from(end, data, start_of_links + xbin_adj)
         links = []
-        for i in range(links_count):
-            idx = unpack_u32_from(end, data, start_of_links + 4 + 4 * i + xbin_adj)
+        for j in range(links_count):
+            idx = unpack_u32_from(end, data, start_of_links + 4 + 4 * j + xbin_adj)
             links.append(idx)
 
         # Third offset: links to required assets (indices)
         assets_count = unpack_u32_from(end, data, start_of_assets + xbin_adj)
         assets = []
-        for i in range(assets_count):
-            idx = unpack_u32_from(end, data, start_of_assets + 4 + 4 * i + xbin_adj)
+        for j in range(assets_count):
+            idx = unpack_u32_from(end, data, start_of_assets + 4 + 4 * j + xbin_adj)
             assets.append(idx)
 
         # Put them in the room list
@@ -297,7 +297,7 @@ def fdgh_to_xml(data, xbin_version):
                                                       # points to
         for asset_index in asset_indices:
             asset_node = etree.SubElement(room_node, 'asset')
-            asset_node.text = text=assets_list[asset_index]
+            asset_node.text = assets_list[asset_index]
 
     # Return well-formed UTF-8 XML
     return ('<?xml version="1.0" encoding="utf-8"?>'
