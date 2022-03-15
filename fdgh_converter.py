@@ -300,8 +300,10 @@ def fdgh_to_xml(data, xbin_version):
             asset_node.text = assets_list[asset_index]
 
     # Return well-formed UTF-8 XML
-    return ('<?xml version="1.0" encoding="utf-8"?>'
-            + etree.tostring(root, encoding='unicode'))
+    if hasattr(etree, 'indent'):  # new in Python 3.9
+        etree.indent(root)
+
+    return etree.tostring(root, encoding='unicode', xml_declaration=True)
 
 
 def xml_to_fdgh(data):
