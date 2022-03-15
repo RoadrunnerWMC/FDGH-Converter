@@ -194,8 +194,8 @@ def save_xbin(end, data, metadata, version):
     if version == 4:
         struct.pack_into(end + 'I', xbin, 0x10, len(xbin))
 
-    xbin.extend(b'COLR' if end == '>' else b'RLOC')
-    xbin.extend(b'\0' * 8)
+        xbin.extend(b'COLR' if end == '>' else b'RLOC')
+        xbin.extend(b'\0' * 8)
 
     return bytes(xbin)
 
