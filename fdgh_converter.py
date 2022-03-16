@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 """
-FDGH Converter 3.0
+FDGH Converter 4.0
 A script that converts FDGH files (found in several Kirby games) to and
 from XML.
-Copyright (C) 2016-2018 RoadrunnerWMC
+Copyright (C) 2016-2022 RoadrunnerWMC
 
 FDGH Converter is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -54,8 +54,23 @@ import datetime
 import string
 import struct
 import sys
-from typing import Any, List, Literal
+from typing import Any, List, Literal, Optional
 from xml.etree import ElementTree as etree
+
+
+# Try to import pyhash (for FNV-1a)
+try:
+    import pyhash
+except ImportError:
+    pyhash = None
+
+# Try to import fnvhash (only if pyhash isn't available)
+fnvhash = None
+if pyhash is None:
+    try:
+        import fnvhash
+    except ImportError:
+        pass
 
 
 Endianness = Literal['<', '>']
@@ -75,6 +90,8 @@ def unpack_u32_from(end: Endianness, *args) -> Any:
     return struct.unpack_from(end + 'I', *args)[0]
 def pack_u32(end: Endianness, *args) -> Any:
     return struct.pack(end + 'I', *args)
+def pack_u64(end: Endianness, *args) -> Any:
+    return struct.pack(end + 'Q', *args)
 
 
 def load_4b_length_prefixed_string(end: Endianness, data: bytes) -> str:
@@ -85,22 +102,38 @@ def load_4b_length_prefixed_string(end: Endianness, data: bytes) -> str:
     return data[4:4+strLen].decode('latin-1')
 
 
-def pack_4b_length_prefixed_padded_string(end: Endianness, string: str) -> bytes:
+def pack_4b_length_prefixed_padded_string(end: Endianness, string: str, num_null_terminators:int=4) -> bytes:
     """
     Pack a 4-byte length prefixed string.
-    These files add 4 bytes of null padding to the end of each of these
-    strings, and *then* pad to multiples of 4 (so, 4-7 bytes of padding
-    total). This function replicates that behavior.
+    Most games add 4 null-terminator bytes to the end of each string,
+    before aligning to multiples of 4 (so, 4-7 bytes of padding total).
+    This was finally fixed in Kirby and the Forgotten Land, which now
+    adds just one null terminator before aligning to 4.
     """
     encoded = pack_u32(end, len(string))
     encoded += string.encode('latin-1')
-    encoded += b'\0\0\0\0'
+    encoded += b'\0' * num_null_terminators
     while len(encoded) % 4:
         encoded += b'\0'
     return encoded
 
 
-def load_string_list(end: Endianness, data: bytes, offset_to_data: int) -> List[str]:
+def fnv1a_64(data: bytes) -> int:
+    """
+    Wrapper around pyhash or fnvhash, which calculates the 64-bit FNV-1a
+    hash of a bytes object
+    """
+    FNV1A_64_INIT = 0xcbf29ce484222325  # from the specification
+
+    if pyhash is not None:
+        return pyhash.fnv1a_64(FNV1A_64_INIT)(data)
+    elif fnvhash is not None:
+        return fnvhash.fnv1a_64(data)
+    else:
+        raise RuntimeError("Neither pyhash nor fnvhash is installed, so FNV-1a hashes can't be calculated")
+
+
+def load_string_list(end: Endianness, data: bytes, offset_to_data: int) -> (List[str], Optional[Literal['fnv1a_64']]):
     """
     Load a string list. This consists of a 4-byte string count (call it
     "n"), followed by n offsets, followed by the data region the offsets
@@ -110,16 +143,25 @@ def load_string_list(end: Endianness, data: bytes, offset_to_data: int) -> List[
     being passed. This is needed in order to convert the absolute
     offsets of the string-offsets section into relative offsets, which
     can be loaded correctly.
+
+    The return value is the string list, and a string indicating the
+    type of hash detected to be in use ('fnv1a_64' for Kirby and the
+    Forgotten Land, None for all previous games).
     """
     number_of_strings = unpack_u32(end, data[:4])
 
+    uses_hashes = (data[4:8] == b'\0\0\0\0')
+
     strs = []
     for i in range(number_of_strings):
-        str_off = unpack_u32_from(end, data, 4 + 4 * i)
+        if uses_hashes:
+            str_off = unpack_u32_from(end, data, 16 + 16 * i)
+        else:
+            str_off = unpack_u32_from(end, data, 4 + 4 * i)
         str_off -= offset_to_data
         strs.append(load_4b_length_prefixed_string(end, data[str_off:]))
 
-    return strs
+    return strs, ('fnv1a_64' if uses_hashes else None)
 
 
 def fdgh_string_sorting_key(s: str) -> Any:
@@ -282,7 +324,7 @@ def fdgh_to_xml(data: bytes, xbin_version: int) -> str:
         room_list.append((room_name, links, assets))
 
     # Assets list
-    assets_list = load_string_list(
+    assets_list, asset_name_hash_type = load_string_list(
         end, data[asset_offset_list_start + xbin_adj:], asset_offset_list_start)
 
     ################################################################
@@ -291,6 +333,11 @@ def fdgh_to_xml(data: bytes, xbin_version: int) -> str:
     root = etree.Element('fdgh')
     root.attrib['endian'] = {'>': 'big', '<': 'little'}[end]
     root.attrib['xbin_version'] = str(xbin_version)
+    if asset_name_hash_type is None:
+        root.attrib['num_string_null_terminators'] = '4'
+    else:
+        root.attrib['num_string_null_terminators'] = '1'
+        root.attrib['asset_name_hashes'] = asset_name_hash_type
 
     # Comment
     root.append(etree.Comment('This XML file was generated on '
@@ -338,6 +385,10 @@ def xml_to_fdgh(data: str) -> bytes:
     end = {'big': '>', 'little': '<'}.get(
         fdgh_root.attrib.get('endian', 'big'), '>')
     xbin_version = int(fdgh_root.attrib.get('xbin_version', '2'))
+    num_string_null_terminators = int(fdgh_root.attrib.get('num_string_null_terminators', 4))
+    asset_name_hash_type = fdgh_root.attrib.get('asset_name_hashes')
+    if asset_name_hash_type not in {None, 'fnv1a_64'}:
+        raise ValueError(f'Unsupported hash type: {asset_name_hashes}')
 
     for container in fdgh_root:
         if container.tag == 'worldmap':
@@ -424,7 +475,7 @@ def xml_to_fdgh(data: str) -> bytes:
 
         # Room name
         room_offset_data += pack_u32(end, offset_to_room_data + len(room_data))
-        room_data += pack_4b_length_prefixed_padded_string(end, room_name)
+        room_data += pack_4b_length_prefixed_padded_string(end, room_name, num_string_null_terminators)
 
         # Link names
         room_offset_data += pack_u32(end, offset_to_room_data + len(room_data))
@@ -446,17 +497,27 @@ def xml_to_fdgh(data: str) -> bytes:
         for name in asset_names:
             room_data += pack_u32(end, assets_list.index(name))
 
+    # No clue why they do this
+    if asset_name_hash_type is not None:
+        room_data += b'\0\0\0\0'
+
     # Step 6: add the offset to the assets list to the header
     offset_to_assets_header_list = offset_to_room_data + len(room_data)
     fdgh_head += pack_u32(end, offset_to_assets_header_list)
-    offset_to_assets_list = offset_to_assets_header_list + 4 + len(assets_list) * 4
+    if asset_name_hash_type == 'fnv1a_64':
+        offset_to_assets_list = offset_to_assets_header_list + 4 + len(assets_list) * 16
+    else:
+        offset_to_assets_list = offset_to_assets_header_list + 4 + len(assets_list) * 4
 
     # Step 7: generate the assets list itself
     assets_offset_data = pack_u32(end, len(assets_list))
     assets_data = b''
     for asset in assets_list:
+        if asset_name_hash_type == 'fnv1a_64':
+            assets_offset_data += b'\0\0\0\0'
+            assets_offset_data += pack_u64(end, fnv1a_64(asset.encode('latin-1')))
         assets_offset_data += pack_u32(end, offset_to_assets_list + len(assets_data))
-        assets_data += pack_4b_length_prefixed_padded_string(end, asset)
+        assets_data += pack_4b_length_prefixed_padded_string(end, asset, num_string_null_terminators)
 
     # Step 8: put it all together
     return (end,
