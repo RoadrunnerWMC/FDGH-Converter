@@ -18,11 +18,9 @@ All FDGH files to date have identical semantics, but the binary representations 
 
 ## Usage
 
-If using a release build, you can simply drag-and-drop `Archive.dat` or `Archive.xml` onto the executable. If running from source, see below.
+If using a release build, you can simply drag-and-drop `Archive.dat` or `Archive.xml` onto the executable.
 
-If you plan to use FDGH Converter with files from Kirby and the Forgotten Land, you need to install either [pyhash](https://pypi.org/project/pyhash/) or [fnvhash](https://pypi.org/project/fnvhash/), which are needed to recompute the hash values. pyhash has better performance but is sometimes more difficult to install, whereas fnvhash is less performant but can be installed on any platform that supports Python. FDGH Converter will use whichever one is available.
-
-Once you have prerequisites installed (if necessary), run fdgh_converter.py with a recent version of Python 3. (Tested with 3.8.10 on Ubuntu.)
+If running from source, run fdgh_converter.py with a recent version of Python 3. (Tested with 3.8.10 on Ubuntu.)
 
 * `python3 fdgh_converter.py file.dat`: Converts file.dat to file.xml
 * `python3 fdgh_converter.py file.xml`: Converts file.xml to file.dat

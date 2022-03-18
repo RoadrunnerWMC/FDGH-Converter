@@ -58,21 +58,6 @@ from typing import Any, List, Literal, Optional
 from xml.etree import ElementTree as etree
 
 
-# Try to import pyhash (for FNV-1a)
-try:
-    import pyhash
-except ImportError:
-    pyhash = None
-
-# Try to import fnvhash (only if pyhash isn't available)
-fnvhash = None
-if pyhash is None:
-    try:
-        import fnvhash
-    except ImportError:
-        pass
-
-
 Endianness = Literal['<', '>']
 
 
@@ -120,17 +105,13 @@ def pack_4b_length_prefixed_padded_string(end: Endianness, string: str, num_null
 
 def fnv1a_64(data: bytes) -> int:
     """
-    Wrapper around pyhash or fnvhash, which calculates the 64-bit FNV-1a
-    hash of a bytes object
+    Calculate the 64-bit FNV-1a hash of a bytes object:
+    https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
     """
-    FNV1A_64_INIT = 0xcbf29ce484222325  # from the specification
-
-    if pyhash is not None:
-        return pyhash.fnv1a_64(FNV1A_64_INIT)(data)
-    elif fnvhash is not None:
-        return fnvhash.fnv1a_64(data)
-    else:
-        raise RuntimeError("Neither pyhash nor fnvhash is installed, so FNV-1a hashes can't be calculated")
+    hash = 0xcbf29ce484222325
+    for b in data:
+        hash = ((hash ^ b) * 0x100000001b3) & 0xffffffffffffffff
+    return hash
 
 
 def load_string_list(end: Endianness, data: bytes, offset_to_data: int) -> (List[str], Optional[Literal['fnv1a_64']]):
