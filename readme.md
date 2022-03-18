@@ -22,8 +22,7 @@ If using a release build, you can simply drag-and-drop `Archive.dat` or `Archive
 
 If running from source, run fdgh_converter.py with a recent version of Python 3. (Tested with 3.8.10 on Ubuntu.)
 
-* `python3 fdgh_converter.py file.dat`: Converts file.dat to file.xml
-* `python3 fdgh_converter.py file.xml`: Converts file.xml to file.dat
+Run with `-h` or `--help` for additional help with CLI options.
 
 ## License
 

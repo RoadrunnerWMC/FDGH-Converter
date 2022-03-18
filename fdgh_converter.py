@@ -1,59 +1,28 @@
 #!/usr/bin/python3
-"""
-FDGH Converter 4.0
-A script that converts FDGH files (found in several Kirby games) to and
-from XML.
-Copyright (C) 2016-2022 RoadrunnerWMC
+# FDGH Converter 4.0
+# A script that converts FDGH files (found in several Kirby games) to and
+# from XML.
+# Copyright (C) 2016-2022 RoadrunnerWMC
 
-FDGH Converter is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+# FDGH Converter is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 
-FDGH Converter is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+# FDGH Converter is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with FDGH Converter.  If not, see <http://www.gnu.org/licenses/>.
-
-~~~~
-
-FDGH is a file format used in various Kirby games that defines which
-files (models, animations, etc) the game should load in advance of each
-level. If a level calls for enemies not foretold by the FDGH file, the
-game will either lag (Return to Dreamland) or crash (Triple Deluxe,
-Robobot). Thus, the FDGH file needs to be editable for interesting
-custom levels to be possible.
-
-Kirby's Return to Dreamland's single FDGH file, located at
-<disk_root>/fdg/Archive.dat, is embedded in a very thin wrapper called
-an XBIN. While most XBIN files have a .bin extension, this particular
-one has a .dat extension for reasons unknown.
-
-Kirby's Return to Dreamland uses big-endian XBIN and FDGH files, and
-Kirby Triple Deluxe through Kirby Star Allies use little-endian XBIN and
-FDGH files. Endianness is detected automatically when converting FDGH to
-XML, and can be specified using the "endian" attribute of the root XML
-node when converting back. (Valid values: "big", "little". For backward-
-compatibility, the default is "big" if unspecified.)
-
-Kirby Battle Royale and Kirby Star Allies use version "4" XBIN files;
-earlier games use version "2". This can be specified using the
-"xbin_version" attribute of the root XML node. (Only versions 2 and 4
-are supported. The default is "2" for backward-compatibility.)
-
-Usage:
-python3 fdgh_converter.py file.dat    Converts file.dat to file.xml
-python3 fdgh_converter.py file.xml    Converts file.xml to file.dat
-"""
+# You should have received a copy of the GNU General Public License
+# along with FDGH Converter.  If not, see <http://www.gnu.org/licenses/>.
 
 
+import argparse
 import datetime
+import pathlib
 import string
 import struct
-import sys
 from typing import Any, List, Literal, Optional
 from xml.etree import ElementTree as etree
 
@@ -62,10 +31,13 @@ Endianness = Literal['<', '>']
 
 
 DEFAULT_WORLDMAP_UNKNOWN_VALUE = 2
-XBIN_MAGIC_BE = b'XBIN' + b'\x12\x34'
-XBIN_MAGIC_LE = b'XBIN' + b'\x34\x12'
+XBIN_MAGIC =  b'XBIN'
+XBIN_MAGIC_BE = XBIN_MAGIC + b'\x12\x34'
+XBIN_MAGIC_LE = XBIN_MAGIC + b'\x34\x12'
 FDGH_MAGIC_BE = b'FDGH'
 FDGH_MAGIC_LE = b'HGDF'
+
+XML_COMMENT = 'This XML file was generated on {} by FDGH Converter 4.0 (https://github.com/RoadrunnerWMC/FDGH-Converter)'
 
 
 # These make the code cleaner!
@@ -321,10 +293,7 @@ def fdgh_to_xml(data: bytes, xbin_version: int) -> str:
         root.attrib['asset_name_hashes'] = asset_name_hash_type
 
     # Comment
-    root.append(etree.Comment('This XML file was generated on '
-                              + str(datetime.datetime.now())
-                              + ' by:'
-                              + __doc__))
+    root.append(etree.Comment(XML_COMMENT.format(datetime.datetime.now())))
 
     # World map
     world_map_node = etree.SubElement(root, 'worldmap',
@@ -507,53 +476,65 @@ def xml_to_fdgh(data: str) -> bytes:
             xbin_version)
 
 
-def main(argv: List[str]) -> None:
+def main(argv:List[str]=None) -> None:
     """
     Main method run automatically when this module is invoked as a
     script
     """
-    print(__doc__)
+    parser = argparse.ArgumentParser(
+        description='FDGH Converter: Convert FDGH files from Kirby games to/from XML.')
 
-    if len(argv) != 2:
-        print('ERROR: incorrect number of command-line arguments'
-              f' (expected 2, got {len(argv)})')
-        return
+    parser.add_argument('input_file', type=pathlib.Path,
+        help='input file (FDGH or XML)')
+    parser.add_argument('output_file', nargs='?', type=pathlib.Path,
+        help='output file (XML or FDGH)')
+    parser.add_argument('--overwrite', action='store_true',
+        help="overwrite the output file if it already exists (only needed if an output filename isn't explicitly specified)")
 
-    input_file = argv[1]
+    args = parser.parse_args(argv)
 
-    if input_file.endswith('.dat'):
-        # Convert FDGH to XML
+    # Auto-detect input file format with some heuristics
+    with args.input_file.open('rb') as f:
+        first_1024 = f.read(1024)
+    input_is_xbin = (first_1024.startswith(XBIN_MAGIC)
+        and any(magic in first_1024 for magic in {FDGH_MAGIC_BE, FDGH_MAGIC_LE})
+        and (b'\0' in first_1024))
+    input_is_xml = ((b'<fdgh' in first_1024)
+        and (b'\0' not in first_1024))
+
+    if not (input_is_xbin ^ input_is_xml):
+        raise ValueError('Unrecognized input file format')
+
+    # Get output file path
+    output_fp = args.output_file
+    if output_fp is None:
+        output_fp = args.input_file.with_suffix('.xml' if input_is_xbin else '.dat')
+        if output_fp.is_file() and not args.overwrite:
+            raise ValueError(f'Auto-selected output filename "{output_fp}" already exists, and --overwrite wasn\'t specified')
+
+    # Perform actual conversion
+    if input_is_xbin:
         print('Converting FDGH to XML.')
 
-        with open(input_file, 'rb') as f:
-            xbin_data = f.read()
+        xbin_data = args.input_file.read_bytes()
 
         end, fdgh_data, metadata, xbin_version = load_xbin(xbin_data)
         xml_data = fdgh_to_xml(fdgh_data, xbin_version)
 
-        with open(input_file[:-4] + '.xml', 'w', encoding='utf-8') as f:
-            f.write(xml_data)
+        output_fp.write_text(xml_data, encoding='utf-8')
 
-    elif input_file.endswith('.xml'):
-        # Convert XML to FDGH
+    else:
         print('Converting XML to FDGH.')
 
-        with open(input_file, 'r', encoding='utf-8') as f:
-            xml_data = f.read()
+        xml_data = args.input_file.read_text(encoding='utf-8')
 
         end, fdgh_data, xbin_version = xml_to_fdgh(xml_data)
         xbin_data = save_xbin(end, fdgh_data, 0xFDE9, xbin_version)
 
-        with open(input_file[:-4] + '.dat', 'wb') as f:
-            f.write(xbin_data)
-
-    else:
-        print('ERROR: the input filename does not end with ".dat" or'
-              f' ".xml" (it ends with "{input_file[-4:]}")')
-        return
+        output_fp.write_bytes(xbin_data)
 
     print('Done.')
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
