@@ -24,6 +24,8 @@ If running from source, run fdgh_converter.py with a recent version of Python 3.
 
 Run with `-h` or `--help` for additional help with CLI options.
 
+An "xbin_cli" script is also provided, which lets you manually add/remove XBIN headers to/from files.
+
 ## License
 
 Licensed under the GNU General Public License version 3 or (at your option) any later version. (See the "COPYING" file for more information.)

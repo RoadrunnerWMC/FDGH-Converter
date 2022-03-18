@@ -20,7 +20,7 @@
 
 import argparse
 import datetime
-import pathlib
+from pathlib import Path
 import string
 import struct
 from typing import Any, List, Literal, Optional
@@ -476,6 +476,25 @@ def xml_to_fdgh(data: str) -> bytes:
             xbin_version)
 
 
+def get_output_path(args: argparse.Namespace, auto_suffix: str) -> Path:
+    """
+    Assumes that args contains a required "input_file" arg, an optional
+    "output_file" one, and an "--overwrite" flag that dictates whether
+    an auto-generated filename is allowed to overwrite an existing file.
+
+    Get the appropriate output file path, or raise an error if the
+    overwrite rule would be violated.
+    """
+    if args.output_file is None:
+        output_fp = args.input_file.with_suffix(auto_suffix)
+        if output_fp.is_file() and not args.overwrite:
+            raise ValueError(f'Auto-selected output filename "{output_fp}" already exists, and --overwrite wasn\'t specified')
+        return output_fp
+
+    else:
+        return args.output_file
+
+
 def main(argv:List[str]=None) -> None:
     """
     Main method run automatically when this module is invoked as a
@@ -484,9 +503,9 @@ def main(argv:List[str]=None) -> None:
     parser = argparse.ArgumentParser(
         description='FDGH Converter: Convert FDGH files from Kirby games to/from XML.')
 
-    parser.add_argument('input_file', type=pathlib.Path,
+    parser.add_argument('input_file', type=Path,
         help='input file (FDGH or XML)')
-    parser.add_argument('output_file', nargs='?', type=pathlib.Path,
+    parser.add_argument('output_file', nargs='?', type=Path,
         help='output file (XML or FDGH)')
     parser.add_argument('--overwrite', action='store_true',
         help="overwrite the output file if it already exists (only needed if an output filename isn't explicitly specified)")
@@ -506,11 +525,7 @@ def main(argv:List[str]=None) -> None:
         raise ValueError('Unrecognized input file format')
 
     # Get output file path
-    output_fp = args.output_file
-    if output_fp is None:
-        output_fp = args.input_file.with_suffix('.xml' if input_is_xbin else '.dat')
-        if output_fp.is_file() and not args.overwrite:
-            raise ValueError(f'Auto-selected output filename "{output_fp}" already exists, and --overwrite wasn\'t specified')
+    output_fp = get_output_path(args, '.xml' if input_is_xbin else '.dat')
 
     # Perform actual conversion
     if input_is_xbin:
