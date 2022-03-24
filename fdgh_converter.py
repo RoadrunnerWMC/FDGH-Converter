@@ -447,9 +447,10 @@ def xml_to_fdgh(data: str) -> bytes:
         for name in asset_names:
             room_data += pack_u32(end, assets_list.index(name))
 
-    # No clue why they do this
+    # Assets offset data needs to be aligned to 8, but only for KatFL
     if asset_name_hash_type is not None:
-        room_data += b'\0\0\0\0'
+        while (len(fdgh_head) + len(world_map_data) + len(room_offset_data) + len(room_data)) % 8:
+            room_data += b'\0'
 
     # Step 6: add the offset to the assets list to the header
     offset_to_assets_header_list = offset_to_room_data + len(room_data)
