@@ -21,7 +21,6 @@
 import argparse
 import datetime
 from pathlib import Path
-import string
 import struct
 from typing import Any, List, Literal, Optional
 from xml.etree import ElementTree as etree
@@ -117,15 +116,22 @@ def load_string_list(end: Endianness, data: bytes, offset_to_data: int) -> (List
     return strs, ('fnv1a_64' if uses_hashes else None)
 
 
+# This is string.punctuation but with `.` and `-` swapped.
+# This change is necessary to get correct output for Kirby Star Allies.
+# I have no idea why HAL sorts strings weirdly.
+STRING_SORTING_PUNCTUATION_TABLE = '!"#$%&\'()*+,.-/:;<=>?@[\]^_`{|}~'
+
+
 def fdgh_string_sorting_key(s: str) -> Any:
     """
     Function that can be used to sort strings the same way HAL's tool does
     """
     key = []
     for c in s.lower():
-        # Oddly, punctuation sorts before everything else in this sorting scheme
-        if c in string.punctuation:
-            key.append(ord(c) - 999999999999999)
+        # Oddly, punctuation sorts before everything else in this sorting scheme,
+        # and punctuation isn't even sorted according to ASCII
+        if c in STRING_SORTING_PUNCTUATION_TABLE:
+            key.append(STRING_SORTING_PUNCTUATION_TABLE.index(c) - 999999999999999)
         else:
             key.append(ord(c))
 
