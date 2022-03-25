@@ -5,7 +5,7 @@ Copyright (C) 2016-2022 RoadrunnerWMC
 
 ## FDGH Files
 
-FDGH is a file format used in many HAL Laboratory games since Kirby's Return to Dreamland, including most of the subsequent Kirby games as well as the first three BoxBoy games. It lists the files (models, animations, etc) that the game should load in advance of each level. If a level calls for enemies not named by the FDGH file, older games (such as Return to Dreamland) will tend to lag as the files are loaded during gameplay. Recent games can handle it better, but it's still best to set up the FDGH correctly.
+FDGH is a file format used in many HAL Laboratory games since Kirby's Return to Dream Land, including most of the subsequent Kirby games as well as the first three BoxBoy games. It lists the files (models, animations, etc) that the game should load in advance of each level. If a level calls for enemies not named by the FDGH file, older games (such as Return to Dream Land) will tend to lag as the files are loaded during gameplay. Recent games can handle it better, but it's still best to set up the FDGH correctly.
 
 In all known games that use this format, there's a single FDGH file, located at `<fs_root>/fdg/Archive.dat`. The FDGH data is embedded in a very thin wrapper called an XBIN. While most XBIN files have a .bin extension, this particular one has a .dat extension for unknown reasons.
 
