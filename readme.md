@@ -38,6 +38,7 @@ Games known to have FDGH files (all are compatible with this tool):
 - Kirby Fighters 2
 - Kirby and the Forgotten Land (Demo)
 - Kirby and the Forgotten Land
+- Kirby's Dream Buffet
 
 Games developed or co-developed by HAL Laboratory after RtDL that are known to *not* have FDGH files:
 
