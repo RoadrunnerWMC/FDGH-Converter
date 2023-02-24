@@ -163,7 +163,7 @@ def load_xbin(data: bytes) -> (Endianness, bytes, int, int):
 
         filesize, metadata = struct.unpack_from(end + '2I', data, 8)
 
-    elif version == 4:
+    elif version in {4, 5}:
         data_start = 0x14
 
         filesize, metadata, colr_offset = struct.unpack_from(end + '3I', data, 8)
@@ -198,21 +198,21 @@ def save_xbin(end: Endianness, data: bytes, metadata: int, version: int) -> byte
 
     if version == 2:
         header_len = 0x10
-    elif version == 4:
+    elif version in {4, 5}:
         header_len = 0x14
     else:
         raise ValueError(f'Unknown XBIN version: {version}')
 
     xbin.extend(struct.pack(end + '2I', header_len + len(data), metadata))
 
-    if version == 4:
+    if version in {4, 5}:
         xbin.extend(b'\0\0\0\0')  # actual value filled in later
 
     xbin.extend(data)
     while len(xbin) % 4:
         xbin.append(0)
 
-    if version == 4:
+    if version in {4, 5}:
         struct.pack_into(end + 'I', xbin, 0x10, len(xbin))
 
         xbin.extend(b'COLR' if end == '>' else b'RLOC')
@@ -234,6 +234,7 @@ def fdgh_to_xml(data: bytes, xbin_version: int) -> str:
     xbin_adj = {
         2: -0x10,
         4: -0x14,
+        5: -0x14,
         }.get(xbin_version)
     if xbin_adj is None:
         raise ValueError(f'Unknown XBIN version: {xbin_version}')
@@ -385,6 +386,7 @@ def xml_to_fdgh(data: str) -> bytes:
     xbin_adj = {
         2: 0x10,
         4: 0x14,
+        5: 0x14,
         }.get(xbin_version)
     if xbin_adj is None:
         raise ValueError(f'Unknown XBIN version: {xbin_version}')

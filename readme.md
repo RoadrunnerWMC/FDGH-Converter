@@ -12,7 +12,7 @@ In all known games that use this format, there's a single FDGH file, located at 
 All FDGH files to date have identical semantics, but the binary representations have varied from game to game. FDGH Converter auto-detects the details when loading a file, notes them in attributes of the root XML node, and reproduces them when saving. The attributes are specifically:
 
 * `endian` ("big" or "little"; default "big" for backward compatibility) -- the endianness of the file, which always matches the native endianness of the console the game was released for.
-* `xbin_version` ("2" or "4"; default "2" for backward compatibility) -- the version number for the XBIN wrapper. Version 4 XBINs (found in Kirby Battle Royale and newer games) have a small amount of extra, constant data.
+* `xbin_version` ("2", "4", or "5"; default "2" for backward compatibility) -- the version number for the XBIN wrapper. Version 4 XBINs (found in Kirby Battle Royale and newer games) have a small amount of extra, constant data. Version 5 XBINs (found in Kirby's Return to Dream Land Deluxe and newer games) seem identical to version 4.
 * `num_string_null_terminators` (any number; default "4" for backward compatibility) -- the number of null terminators to use at the ends of strings. Kirby and the Forgotten Land uses 1; all prior games use 4.
 * `asset_name_hashes` (either not present, or "fnv1a_64") -- if present and set to "fnv1a_64", indicates that the asset names table should include hashes of every string, using the 64-bit FNV-1a algorithm. Kirby and the Forgotten Land is the first game to do this.
 
@@ -39,6 +39,8 @@ Games known to have FDGH files (all are compatible with this tool):
 - Kirby and the Forgotten Land (Demo)
 - Kirby and the Forgotten Land
 - Kirby's Dream Buffet
+- Kirby's Return to Dream Land Deluxe (Demo)
+- Kirby's Return to Dream Land Deluxe
 
 Games developed or co-developed by HAL Laboratory after RtDL that are known to *not* have FDGH files:
 
@@ -52,7 +54,7 @@ Games developed or co-developed by HAL Laboratory after RtDL that are known to *
 
 If using a release build, you can simply drag-and-drop `Archive.dat` or `Archive.xml` onto the executable.
 
-If running from source, run fdgh_converter.py with a recent version of Python 3. (Tested with 3.8.10 on Ubuntu.)
+If running from source, run fdgh_converter.py with a recent version of Python 3. (Tested with 3.10 on Ubuntu.)
 
 Run with `-h` or `--help` for additional help with CLI options.
 
