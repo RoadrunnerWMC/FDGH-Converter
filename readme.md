@@ -49,6 +49,7 @@ Games developed or co-developed by HAL Laboratory after RtDL that are known to *
 - Kirby's Extra Epic Yarn
 - BoxBoy! + BoxGirl!
 - Part Time UFO
+- 歩数で勝負!!カメさんぽ (Hosu de Shobu!!Kame Sampo)
 
 ## Usage
 
