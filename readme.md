@@ -1,7 +1,11 @@
-# FDGH Converter 4.0
+# FDGH Converter 4.0 Fix
 
-A script that converts FDGH files (found in many HAL Laboratory games) to and from XML.
+This is a forked copy of the original repository as it has sat untouched for over a year with changes made to it by its original uploader that render it unusable. This fork remedies the issues and allows it to be compiled again and includes a release build which the original had at one point but had removed for an unknown reason.
+
+An executable file that converts FDGH files (found in many HAL Laboratory games) to and from XML.
 Copyright (C) 2016-2022 RoadrunnerWMC
+
+Amended by "Johnny Bigtrousers"
 
 ## FDGH Files
 
@@ -60,6 +64,11 @@ If running from source, run fdgh_converter.py with a recent version of Python 3.
 Run with `-h` or `--help` for additional help with CLI options.
 
 An "xbin_cli" script is also provided, which lets you manually add/remove XBIN headers to/from files.
+
+
+
+This is a comment added by the fixer here, uh,
+I'd recommend using this in combination with KirbyFDGH for complete scope of adding/removing custom objects to the available games cuz this program makes up for the main shortcoming that KirbyFDGH has, that being the inability to add/remove new reference strings to the list of existing ones. The reason this is useful is because while you can add custom assets to the games just fine it will definitely cause lag if they are not preloaded in a given room's FDGH bank (may also cause crashes and almost definitely worse effects on actual console if not). One thing to note about using these two programs together is that adding a string reference to any room via adding text in the XML then converting it back will add it to the list of strings available when the bank is loaded into KirbyFDGH, so if you just add it to one then it'll give you the option to add them to any other.
 
 ## License
 

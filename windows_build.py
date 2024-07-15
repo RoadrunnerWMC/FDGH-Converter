@@ -1,10 +1,11 @@
 #!/usr/bin/python
 # -*- coding: latin-1 -*-
 """
-FDGH Converter 3.0
+FDGH Converter 4.0
 A script that converts Kirby's Return to Dreamland FDGH files to and
 from XML.
 Copyright (C) 2016-2018 RoadrunnerWMC
+Amended by "Johnny Bigtrousers"
 
 FDGH Converter is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +21,7 @@ You should have received a copy of the GNU General Public License
 along with FDGH Converter.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-Version = '3.0' # This must be a valid float in string format
+Version = '4.0' # This must be a valid float in string format
 
 
 ################################################################
@@ -73,7 +74,7 @@ printv('>> Directory ready!')
 
 # exclude Python stuff we don't use
 excludes = ['doctest', 'pdb', 'unittest', 'difflib', 'inspect',
-    'os2emxpath', 'posixpath', 'optpath', 'locale', 'calendar',
+    'os2emxpath', 'posixpath', 'optpath', 'calendar',
     'select', 'multiprocessing', 'ssl',
     'PyQt5.QtWebKit', 'PyQt5.QtNetwork']
 
@@ -87,7 +88,7 @@ setup(
     options={
         'build_exe': {
             'excludes': excludes,
-            'packages': ['sip', 'encodings', 'encodings.hex_codec', 'encodings.utf_8'],
+            'packages': ['PyQt5.sip', 'Locales', 'pandas', 'encodings', 'encodings.hex_codec', 'encodings.utf_8'],
             'build_exe': dir_,
             },
         },
