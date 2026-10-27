@@ -38,6 +38,7 @@ Games known to have FDGH files (all are compatible with this tool):
 - Kirby Fighters 2
 - Kirby and the Forgotten Land (Demo)
 - Kirby and the Forgotten Land
+- Kirby and the Forgotten Land - Nintendo Switch 2 Edition + Star-Crossed World
 - Kirby's Dream Buffet
 - Kirby's Return to Dream Land Deluxe (Demo)
 - Kirby's Return to Dream Land Deluxe
