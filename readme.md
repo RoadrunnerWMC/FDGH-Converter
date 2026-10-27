@@ -51,6 +51,7 @@ Games developed or co-developed by HAL Laboratory after RtDL that are known to *
 - BoxBoy! + BoxGirl!
 - Part Time UFO
 - 歩数で勝負!!カメさんぽ (Hosu de Shobu!!Kame Sampo)
+- Kirby Air Riders: Global Test Ride
 - Kirby Air Riders
 
 ## Usage
